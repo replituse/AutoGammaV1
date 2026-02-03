@@ -25,19 +25,20 @@ export async function registerRoutes(
   });
 
   // Session middleware
+  app.set("trust proxy", 1);
   app.use(
     session({
       secret: process.env.SESSION_SECRET || "default_secret",
       resave: false,
       saveUninitialized: false,
       store: storage.sessionStore,
-      name: "sid", // Explicit session cookie name
+      name: "sid",
       proxy: true,
       cookie: {
-        secure: true, // Force secure on VPS (assuming HTTPS)
-        sameSite: "none", // Required for cross-site if domain mismatch or proxied
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
         httpOnly: true,
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        maxAge: 30 * 24 * 60 * 60 * 1000,
       },
     }),
   );
