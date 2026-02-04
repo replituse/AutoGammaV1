@@ -398,20 +398,29 @@ export default function AddJobPage() {
         
         // Build the description for multiple rolls if different roll is used
         let updatedName = existingField.name;
+        
+        const newRollDesc = `Quantity: ${rollQty}sqft (from ${roll?.name || 'Unknown Roll'})`;
+        
         if (roll && existingField.rollId !== selectedPPFRoll) {
           // If different roll, append to description format: Quantity: X (from Roll1) , Quantity: Y (from Roll2)
-          // First, let's extract existing quantities if they are already in the "Quantity: X (from RollY)" format
-          // If not, we format the existing one first.
-          
-          const existingRollDesc = `Quantity: ${existingField.rollUsed}sqft (from ${existingField.rollName || 'Initial Roll'})`;
-          const newRollDesc = `Quantity: ${rollQty}sqft (from ${roll.name})`;
-          
-          // Check if it already has the format
           if (updatedName.includes("Quantity:")) {
             updatedName = `${updatedName} , ${newRollDesc}`;
           } else {
-            // It's the first time adding a second roll
+            // First time adding a second roll
+            const existingRollDesc = `Quantity: ${existingField.rollUsed}sqft (from ${existingField.rollName || 'Initial Roll'})`;
             updatedName = `${updatedName}\n${existingRollDesc} , ${newRollDesc}`;
+          }
+        } else if (roll && existingField.rollId === selectedPPFRoll) {
+          // If same roll, update quantity in description
+          const regex = new RegExp(`Quantity: (\\d+(?:\\.\\d+)?)sqft \\(from ${roll.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`);
+          const match = updatedName.match(regex);
+          if (match) {
+            const oldQty = parseFloat(match[1]);
+            const newQtyForThisRoll = oldQty + (rollQty || 0);
+            updatedName = updatedName.replace(regex, `Quantity: ${newQtyForThisRoll}sqft (from ${roll.name})`);
+          } else {
+            // Fallback if formatting changed or not found
+            updatedName = `${updatedName}\n${newRollDesc}`;
           }
         }
 
@@ -419,18 +428,12 @@ export default function AddJobPage() {
           ...existingField,
           rollUsed: newRollUsed > 0 ? newRollUsed : undefined,
           name: updatedName,
-          // We keep the primary rollId for backward compatibility, but the stock subtraction
-          // on the server will need to handle multiple rolls if we were to support it perfectly.
-          // However, based on the current UI/request, we are just updating the display and summing quantity.
-          // NOTE: The server-side stock subtraction might still only subtract from the first rollId stored.
-          // If the user wants separate stock subtraction, the schema would need to change to an array of rolls.
-          // For now, we fulfill the UI requirement.
         };
         form.setValue("ppfs", currentPPFs);
       } else {
         appendPPF({ 
           ppfId: p.id!, 
-          name: `${p.name} (${vehicleType} - ${selectedWarranty})`,
+          name: `${p.name} (${vehicleType} - ${selectedWarranty})\nQuantity: ${rollQty}sqft (from ${roll?.name || 'Unknown Roll'})`,
           rollId: selectedPPFRoll,
           rollName: roll?.name || "Unknown Roll",
           rollUsed: rollQty > 0 ? rollQty : undefined,
@@ -1117,12 +1120,11 @@ export default function AddJobPage() {
                       {ppfFields.map((field, index) => (
                         <div key={field.id} className="flex items-center justify-between p-3">
                           <div className="flex flex-col">
-                            <span className="text-sm font-medium">{(field as any).name}</span>
-                            {(field as any).rollUsed && (
-                              <span className="text-xs text-slate-500">
-                                Quantity: {(field as any).rollUsed}sqft {(field as any).rollName ? `(from ${(field as any).rollName})` : ""}
+                            {field.name.split('\n').map((line: string, i: number) => (
+                              <span key={i} className={i === 0 ? "text-sm font-medium" : "text-xs text-slate-500"}>
+                                {line}
                               </span>
-                            )}
+                            ))}
                           </div>
                           <Button variant="ghost" size="icon" type="button" onClick={() => removePPF(index)} className="h-8 w-8 text-slate-400 hover:text-red-600">
                             <Trash2 className="h-4 w-4" />
