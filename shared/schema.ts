@@ -200,6 +200,7 @@ export const jobCardSchema = z.object({
   services: z.array(jobCardItemSchema.extend({ technician: z.string().optional() })).default([]),
   ppfs: z.array(jobCardItemSchema.extend({ 
     technician: z.string().optional(),
+    rollId: z.string().optional(),
     rollUsed: z.number().optional()
   })).default([]),
   accessories: z.array(jobCardItemSchema.extend({ quantity: z.number().optional() })).default([]),

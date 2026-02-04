@@ -149,7 +149,7 @@ const jobCardMongoSchema = new mongoose.Schema({
   licensePlate: { type: String, required: true },
   vin: { type: String },
   services: [{ id: String, name: String, price: Number, technician: String, business: { type: String, default: "Auto Gamma" } }],
-  ppfs: [{ id: String, name: String, price: Number, technician: String, rollUsed: Number, business: { type: String, default: "Auto Gamma" } }],
+  ppfs: [{ id: String, name: String, price: Number, technician: String, rollId: String, rollUsed: Number, business: { type: String, default: "Auto Gamma" } }],
   accessories: [{ id: String, name: String, price: Number, quantity: Number, business: { type: String, default: "Auto Gamma" } }],
   laborCharge: { type: Number, default: 0 },
   laborBusiness: { type: String, default: "Auto Gamma" },
@@ -716,6 +716,23 @@ export class MongoStorage implements IStorage {
       date: new Date().toISOString()
     });
     await j.save();
+
+    // Handle stock updates for PPF rolls
+    if (jobCard.ppfs) {
+      for (const ppf of jobCard.ppfs) {
+        if (ppf.rollId && ppf.rollUsed) {
+          const ppfMaster = await PPFMasterModel.findById(ppf.ppfId || (ppf as any).id);
+          if (ppfMaster) {
+            const rollsArr = ppfMaster.rolls as any[];
+            const roll = rollsArr.find((r: any) => (r._id && r._id.toString() === ppf.rollId) || r.id === ppf.rollId);
+            if (roll) {
+              roll.stock -= ppf.rollUsed;
+              await ppfMaster.save();
+            }
+          }
+        }
+      }
+    }
 
     // Generate Invoices based on business assignment
     const businesses = ["Auto Gamma", "AGNX"] as const;

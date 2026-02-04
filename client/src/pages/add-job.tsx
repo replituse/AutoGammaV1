@@ -272,6 +272,7 @@ export default function AddJobPage() {
   const [selectedServiceVehicleType, setSelectedServiceVehicleType] = useState("");
   const [selectedTechnician, setSelectedTechnician] = useState("");
   const [selectedPPF, setSelectedPPF] = useState("");
+  const [selectedPPFRoll, setSelectedPPFRoll] = useState("");
   const [selectedPPFVehicleType, setSelectedPPFVehicleType] = useState("");
   const [selectedWarranty, setSelectedWarranty] = useState("");
   const [rollQty, setRollQty] = useState(0);
@@ -353,6 +354,7 @@ export default function AddJobPage() {
 
   const handleAddPPF = () => {
     const p = ppfMasters.find(item => item.id === selectedPPF);
+    const roll = p?.rolls?.find(r => r._id === selectedPPFRoll || r.id === selectedPPFRoll);
     const tech = technicians.find(t => t.id === selectedTechnician);
     const vehicleType = form.getValues("vehicleType");
 
@@ -372,12 +374,14 @@ export default function AddJobPage() {
       appendPPF({ 
         ppfId: p.id!, 
         name: `${p.name} (${vehicleType} - ${selectedWarranty})`,
+        rollId: selectedPPFRoll,
         rollUsed: rollQty > 0 ? rollQty : undefined,
         price: option?.price || 0,
         technician: tech?.name,
         warranty: selectedWarranty
       } as any);
       setSelectedPPF("");
+      setSelectedPPFRoll("");
       setSelectedWarranty("");
       setRollQty(0);
       setSelectedTechnician("");
@@ -979,6 +983,21 @@ export default function AddJobPage() {
                           ?.options.map(o => (
                             <SelectItem key={o.warrantyName} value={o.warrantyName}>{o.warrantyName}</SelectItem>
                           ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="md:col-span-2 space-y-1.5">
+                    <label className="text-xs font-bold text-muted-foreground uppercase">Select Roll</label>
+                    <Select value={selectedPPFRoll} onValueChange={setSelectedPPFRoll} disabled={!selectedPPF}>
+                      <SelectTrigger className="h-11">
+                        <SelectValue placeholder="Select Roll" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {currentPPF?.rolls?.map((roll: any) => (
+                          <SelectItem key={roll._id || roll.id} value={(roll._id || roll.id)!}>
+                            {roll.name} ({roll.stock} sqft)
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
