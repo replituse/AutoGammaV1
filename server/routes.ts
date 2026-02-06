@@ -37,22 +37,20 @@ export async function registerRoutes(
   app.use(
     session({
       secret: process.env.SESSION_SECRET || "default_secret",
-      resave: false,
-      saveUninitialized: false,
       store: storage.sessionStore,
       name: "sid",
       proxy: true,
       cookie: {
-      secure: false, 
-      sameSite: "lax",
-      httpOnly: true,
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    },
-    rolling: true,
-    resave: true,
-    saveUninitialized: true,
-  }),
-);
+        secure: false,
+        sameSite: "lax",
+        httpOnly: true,
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+      },
+      rolling: true,
+      resave: true,
+      saveUninitialized: true,
+    }),
+  );
 
 // Clear logs for production once fixed
 app.use((req, res, next) => {

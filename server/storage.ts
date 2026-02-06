@@ -22,6 +22,7 @@ import {
   Invoice
 } from "@shared/schema";
 import session from "express-session";
+// @ts-ignore
 import MongoStore from "connect-mongodb-session";
 
 const MongoDBStore = MongoStore(session);
@@ -203,6 +204,8 @@ const invoiceMongoSchema = new mongoose.Schema({
   totalAmount: { type: Number, required: true },
   date: { type: String, required: true },
   isPaid: { type: Boolean, default: false },
+  paymentMethod: { type: String },
+  paymentDate: { type: String },
   payments: [{
     amount: Number,
     method: String,
@@ -359,7 +362,7 @@ export class MongoStorage implements IStorage {
 
     // Calculate total balance from all invoices (partial + unpaid)
     const totalBalance = invoices.reduce((acc, inv) => {
-      const paidAmount = (inv.payments || []).reduce((sum, p) => sum + p.amount, 0);
+      const paidAmount = (inv.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
       const balance = inv.totalAmount - paidAmount;
       return acc + (balance > 0 ? balance : 0);
     }, 0);
