@@ -193,14 +193,65 @@ export default function AddJobPage() {
           price: s.price,
           technician: s.technician
         })),
-        ppfs: (jobToEdit.ppfs || []).map(p => ({
-          ppfId: (p as any).ppfId || (p as any).id,
-          name: p.name,
-          price: p.price,
-          technician: p.technician,
-          rollUsed: p.rollUsed,
-          warranty: (p as any).warranty || p.name.match(/\((.*)\)/)?.[1]?.split(" - ")?.[1] || ""
-        })),
+        ppfs: (jobToEdit.ppfs || []).reduce((acc: any[], p: any) => {
+          const ppfId = (p as any).ppfId || (p as any).id;
+          const warranty = (p as any).warranty || p.name.match(/\((.*)\)/)?.[1]?.split(" - ")?.[1] || "";
+          
+          const existing = acc.find(item => item.ppfId === ppfId && item.warranty === warranty);
+          
+          if (existing) {
+            // Group rolls for same PPF and Warranty
+            existing.rollUsed = (existing.rollUsed || 0) + (p.rollUsed || 0);
+            
+            // Add quantity info to description
+            const rollMatch = p.name.match(/Quantity: (\d+(?:\.\d+)?)sqft \(from (.*?)\)/);
+            if (rollMatch) {
+              const qty = rollMatch[1];
+              const rollName = rollMatch[2];
+              
+              const existingRollRegex = new RegExp(`Quantity: (\\d+(?:\\.\\d+)?)sqft \\(from ${rollName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`);
+              const existingRollMatch = existing.name.match(existingRollRegex);
+              
+              if (existingRollMatch) {
+                const oldQty = parseFloat(existingRollMatch[1]);
+                const newQty = oldQty + parseFloat(qty);
+                existing.name = existing.name.replace(existingRollRegex, `Quantity: ${newQty}sqft (from ${rollName})`);
+              } else {
+                existing.name += ` , Quantity: ${qty}sqft (from ${rollName})`;
+              }
+            }
+            
+            // Update rollsUsed array
+            if (p.rollId && p.rollUsed) {
+              existing.rollsUsed = existing.rollsUsed || [];
+              const existingRollEntry = existing.rollsUsed.find((r: any) => r.rollId === p.rollId);
+              if (existingRollEntry) {
+                existingRollEntry.rollUsed += p.rollUsed;
+              } else {
+                existingRollEntry.push({
+                  rollId: p.rollId,
+                  rollName: p.rollName || "Unknown Roll",
+                  rollUsed: p.rollUsed
+                });
+              }
+            }
+          } else {
+            acc.push({
+              ppfId,
+              name: p.name,
+              price: p.price,
+              technician: p.technician,
+              rollUsed: p.rollUsed,
+              rollsUsed: p.rollsUsed || (p.rollId ? [{
+                rollId: p.rollId,
+                rollName: p.rollName || "Unknown Roll",
+                rollUsed: p.rollUsed
+              }] : []),
+              warranty
+            });
+          }
+          return acc;
+        }, []),
         accessories: (jobToEdit.accessories || []).map(a => ({
           accessoryId: (a as any).accessoryId || (a as any).id,
           name: a.name,
@@ -382,10 +433,10 @@ export default function AddJobPage() {
     
     if (p && selectedWarranty) {
       // User says: "ppf type like for eg Garware Elite will always have atmost 1 card only"
-      // So we search for any existing entry with the same PPF ID ONLY.
+      // So we search for any existing entry with the same PPF ID AND Warranty.
       const currentPPFs = [...form.getValues("ppfs")];
       const existingPPFIndex = currentPPFs.findIndex(
-        (field: any) => field.ppfId === p.id
+        (field: any) => field.ppfId === p.id && field.warranty === selectedWarranty
       );
 
       if (existingPPFIndex !== -1) {
