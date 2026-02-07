@@ -1350,10 +1350,13 @@ export class MongoStorage implements IStorage {
     const invoice = await InvoiceModel.findById(id);
     if (!invoice) return false;
 
+    console.log(`[DELETE INVOICE] Found invoice: ${invoice.invoiceNo}, jobCardId: ${invoice.jobCardId}`);
+
     // Replenish PPF stock if there are PPF items
     if (invoice.items && invoice.items.length > 0) {
       for (const item of invoice.items) {
-        if (item.type === "PPF" && item.rollUsed && item.rollUsed > 0 && item.name) {
+        if (item.type === "PPF" && item.rollUsed && item.rollUsed > 0) {
+          console.log(`[REPLENISH] Processing PPF item: ${item.name}, rollUsed: ${item.rollUsed}`);
           // 1. Identify the PPF Master
           let ppfMaster = null;
           
@@ -1363,7 +1366,7 @@ export class MongoStorage implements IStorage {
           }
           
           // Fallback: Try by name from description (handles legacy invoices)
-          if (!ppfMaster) {
+          if (!ppfMaster && item.name) {
             const ppfName = item.name.split('(')[0].trim(); // Extract name before details
             ppfMaster = await PPFMasterModel.findOne({ name: { $regex: new RegExp(`^${ppfName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i') } });
           }
@@ -1426,7 +1429,7 @@ export class MongoStorage implements IStorage {
                }
             }
 
-            // Strategy D: Fallback to the first roll if it's the only one and stock is low
+            // Strategy D: Fallback to the first roll if it's the only one
             if (!replenished && ppfMaster.rolls.length === 1) {
                const firstRoll = ppfMaster.rolls[0] as any;
                if (firstRoll) {
@@ -1439,6 +1442,7 @@ export class MongoStorage implements IStorage {
             if (replenished) {
               ppfMaster.markModified("rolls");
               await ppfMaster.save();
+              console.log(`[REPLENISH] Successfully saved PPF Master: ${ppfMaster.name}`);
             } else {
               console.warn(`[REPLENISH] Could not identify roll for item: ${item.name}`);
             }
