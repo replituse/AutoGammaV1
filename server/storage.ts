@@ -1531,27 +1531,33 @@ export class MongoStorage implements IStorage {
     const existingInvoice = await InvoiceModel.findById(id);
     if (!existingInvoice) return undefined;
 
-    // Logic for deducting roll quantities ONLY for newly added rolls
+    // EXCEPTION - Logic for deducting incremental roll quantities
     if (invoice.items) {
       const oldItems = existingInvoice.items || [];
       const newItems = invoice.items;
 
+      // Group old rolls for comparison
+      const oldRollMap = new Map<string, number>();
+      oldItems.forEach(item => {
+        if (item.type === "PPF") {
+          const key = `${item.category}_${item.name}`;
+          oldRollMap.set(key, (oldRollMap.get(key) || 0) + (item.rollUsed || 0));
+        }
+      });
+
       for (const newItem of newItems) {
         if (newItem.type === "PPF") {
-          // Check if this roll was already in the invoice
-          // A roll is considered "new" if no item in oldItems matches its PPF ID and roll details
-          const isNewRoll = !oldItems.some(oldItem => 
-            oldItem.type === "PPF" && 
-            oldItem.name === newItem.name && 
-            oldItem.rollUsed === newItem.rollUsed
-          );
+          const key = `${newItem.category}_${newItem.name}`;
+          const oldQty = oldRollMap.get(key) || 0;
+          const newQty = newItem.rollUsed || 0;
 
-          if (isNewRoll) {
-            const ppfId = newItem.category; // category stores ppfId for stock replenishment logic
+          // Only deduct if new quantity is greater than old quantity
+          if (newQty > oldQty) {
+            const deductQty = newQty - oldQty;
+            const ppfId = newItem.category;
             if (ppfId && mongoose.Types.ObjectId.isValid(ppfId)) {
               const ppfMaster = await PPFMasterModel.findById(ppfId);
-              if (ppfMaster && ppfMaster.rolls && newItem.rollUsed) {
-                // Try to find the roll name from the item name string if rollId isn't explicit
+              if (ppfMaster && ppfMaster.rolls) {
                 const rollMatch = (newItem.name || "").match(/\(from (.*?)\)/);
                 const rollName = rollMatch ? rollMatch[1].split(/[,\s)]/)[0].trim() : "";
                 
@@ -1559,11 +1565,11 @@ export class MongoStorage implements IStorage {
                   r.name === rollName || (r.name && rollName && r.name.toLowerCase().includes(rollName.toLowerCase()))
                 );
 
-                if (roll && newItem.rollUsed > 0) {
-                  roll.stock -= newItem.rollUsed;
+                if (roll) {
+                  roll.stock -= deductQty;
                   ppfMaster.markModified("rolls");
                   await ppfMaster.save();
-                  console.log(`Deducted ${newItem.rollUsed} sqft from roll ${roll.name} for newly added item in Invoice update`);
+                  console.log(`[INVOICE EXCEPTION] Deducted incremental ${deductQty} sqft from roll ${roll.name} (Old: ${oldQty}, New: ${newQty})`);
                 }
               }
             }
