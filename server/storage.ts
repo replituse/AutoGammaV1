@@ -1347,67 +1347,48 @@ export class MongoStorage implements IStorage {
   }
 
   async deleteInvoice(id: string): Promise<boolean> {
-    const invoice = await InvoiceModel.findById(id);
-    if (!invoice) return false;
+    try {
+      const invoice = await InvoiceModel.findById(id);
+      if (!invoice) {
+        console.log(`[STORAGE DELETE INVOICE] Invoice not found: ${id}`);
+        return false;
+      }
 
-    console.log(`[DELETE INVOICE] Found invoice: ${invoice.invoiceNo}, jobCardId: ${invoice.jobCardId}`);
+      console.log(`[STORAGE DELETE INVOICE] Found invoice: ${invoice.invoiceNo}, jobCardId: ${invoice.jobCardId}`);
 
-    // Replenish PPF stock if there are PPF items
-    if (invoice.items && invoice.items.length > 0) {
-      for (const item of invoice.items) {
-        if (item.type === "PPF" && item.rollUsed && item.rollUsed > 0) {
-          console.log(`[REPLENISH] Processing PPF item: ${item.name}, rollUsed: ${item.rollUsed}`);
-          // 1. Identify the PPF Master
-          let ppfMaster = null;
-          
-          // Try by category ID first (newly created invoices)
-          if (item.category && mongoose.Types.ObjectId.isValid(item.category)) {
-            ppfMaster = await PPFMasterModel.findById(item.category);
-          }
-          
-          // Fallback: Try by name from description (handles legacy invoices)
-          if (!ppfMaster && item.name) {
-            const ppfName = item.name.split('(')[0].split('\n')[0].trim(); // Extract name before details/newline
-            console.log(`[REPLENISH] Searching for PPF Master by name: "${ppfName}"`);
-            ppfMaster = await PPFMasterModel.findOne({ name: { $regex: new RegExp(`^${ppfName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
-          }
-
-          if (ppfMaster && ppfMaster.rolls) {
-            console.log(`[REPLENISH] Found PPF Master: ${ppfMaster.name}`);
-            // 2. Identify the Roll(s)
-            const jobCard = await JobCardModel.findById(invoice.jobCardId);
-            let replenished = false;
-
-            // Strategy A: Use roll information from JobCard (most accurate)
-            if (jobCard && jobCard.ppfs) {
-              const matchingPpfInJob = (jobCard.ppfs as any[]).find(p => p.name === item.name || (item.name && item.name.includes(p.name)));
-              if (matchingPpfInJob && matchingPpfInJob.rollId) {
-                const roll = (ppfMaster.rolls as any[]).find(r => 
-                  (r._id && r._id.toString() === matchingPpfInJob.rollId) || r.id === matchingPpfInJob.rollId
-                );
-                if (roll) {
-                  roll.stock += item.rollUsed;
-                  replenished = true;
-                  console.log(`[REPLENISH] Replenished ${item.rollUsed} sqft to roll ${roll.name} via JobCard mapping`);
-                }
-              }
+      // Replenish PPF stock if there are PPF items
+      if (invoice.items && invoice.items.length > 0) {
+        for (const item of invoice.items) {
+          if (item.type === "PPF" && item.rollUsed && item.rollUsed > 0) {
+            console.log(`[REPLENISH] Processing PPF item: ${item.name}, rollUsed: ${item.rollUsed}`);
+            
+            let ppfMaster = null;
+            
+            // Try by category ID first (newly created invoices)
+            if (item.category && mongoose.Types.ObjectId.isValid(item.category)) {
+              ppfMaster = await PPFMasterModel.findById(item.category);
+            }
+            
+            // Fallback: Try by name
+            if (!ppfMaster && item.name) {
+              const ppfName = item.name.split('(')[0].split('\n')[0].trim();
+              ppfMaster = await PPFMasterModel.findOne({ 
+                name: { $regex: new RegExp(`^${ppfName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } 
+              });
             }
 
-            // Strategy B: Parse roll name from description (multi-roll support)
-            if (!replenished && item.name && (item.name.includes("(from ") || item.name.includes("Quantity:"))) {
-              console.log(`[REPLENISH] Attempting Strategy B for description: ${item.name}`);
-              // Match multiple patterns: "Quantity: 400sqft (from Roll2)" or "400sqft (from Roll2)"
-              const rollMatches = Array.from(item.name.matchAll(/(?:Quantity:\s*)?([\d.]+)sqft\s*\(from\s*(.*?)\)/g));
+            if (ppfMaster && ppfMaster.rolls) {
+              let replenished = false;
+
+              // Parse roll name from description (multi-roll support)
+              // Match patterns like: "Quantity: 400sqft (from Roll2)" or "400sqft (from Roll2)"
+              const rollMatches = Array.from((item.name || "").matchAll(/(?:Quantity:\s*)?([\d.]+)sqft\s*\(from\s*(.*?)\)/g));
               
               if (rollMatches.length > 0) {
-                let foundInDescription = false;
                 for (const match of rollMatches) {
-                  const qtyStr = match[1];
-                  const rawRollName = match[2].split(/[,\s)]/)[0].trim(); // Get roll name, stop at comma, space or closing paren
-                  const qty = parseFloat(qtyStr);
-                  console.log(`[REPLENISH] Strategy B match: rawRollName="${rawRollName}", qty=${qty}`);
+                  const qty = parseFloat(match[1]);
+                  const rawRollName = match[2].split(/[,\s)]/)[0].trim();
                   
-                  // Match roll name exactly or as a substring (to handle Roll1 vs Roll1-Legacy)
                   const roll = (ppfMaster.rolls as any[]).find(r => 
                     r.name === rawRollName || 
                     (r.name && r.name.toLowerCase().includes(rawRollName.toLowerCase())) ||
@@ -1416,69 +1397,27 @@ export class MongoStorage implements IStorage {
 
                   if (roll && !isNaN(qty)) {
                     roll.stock += qty;
-                    foundInDescription = true;
-                    console.log(`[REPLENISH] Replenished ${qty} sqft to roll ${roll.name} (matched from "${rawRollName}") parsed from description`);
-                  } else {
-                    console.warn(`[REPLENISH] Strategy B: Roll matching "${rawRollName}" not found in PPF Master "${ppfMaster.name}". Available rolls: ${ppfMaster.rolls.map((r: any) => r.name).join(", ")}`);
+                    replenished = true;
+                    console.log(`[REPLENISH] Added ${qty} to ${roll.name}`);
                   }
                 }
-                if (foundInDescription) replenished = true;
               }
-            } else if (!replenished && item.name && item.name.includes("sqft")) {
-               // Fallback for descriptions like "Garware Elite (Small Cars) - 400sqft" or similar if Roll name is missing but qty exists
-               console.log(`[REPLENISH] Attempting simple qty fallback for: ${item.name}`);
-               const qtyMatch = item.name.match(/([\d.]+)sqft/);
-               if (qtyMatch && qtyMatch[1] && ppfMaster.rolls.length === 1) {
-                 const qty = parseFloat(qtyMatch[1]);
-                 const roll = ppfMaster.rolls[0] as any;
-                 if (roll && !isNaN(qty)) {
-                   roll.stock += qty;
-                   replenished = true;
-                   console.log(`[REPLENISH] Replenished ${qty} sqft to single roll ${roll.name} via simple qty fallback`);
-                 }
-               }
-            }
 
-            // Strategy C: Single roll name fallback "(from Roll1)"
-            if (!replenished && item.name && item.name.includes("(from ")) {
-               const rollMatch = item.name.match(/\(from (.*?)\)/);
-               if (rollMatch && rollMatch[1]) {
-                 const rollName = rollMatch[1].trim();
-                 const roll = (ppfMaster.rolls as any[]).find(r => r.name === rollName);
-                 if (roll) {
-                   roll.stock += item.rollUsed;
-                   replenished = true;
-                   console.log(`[REPLENISH] Replenished ${item.rollUsed} sqft to roll ${rollName} (Strategy C)`);
-                 }
-               }
+              if (replenished) {
+                ppfMaster.markModified("rolls");
+                await ppfMaster.save();
+              }
             }
-
-            // Strategy D: Fallback to the first roll if it's the only one
-            if (!replenished && ppfMaster.rolls.length === 1) {
-               const firstRoll = ppfMaster.rolls[0] as any;
-               if (firstRoll) {
-                 firstRoll.stock += item.rollUsed;
-                 replenished = true;
-                 console.log(`[REPLENISH] Replenished ${item.rollUsed} sqft to the only roll ${firstRoll.name} (Strategy D)`);
-               }
-            }
-
-            if (replenished) {
-              ppfMaster.markModified("rolls");
-              await ppfMaster.save();
-              console.log(`[REPLENISH] Successfully saved PPF Master: ${ppfMaster.name}`);
-            } else {
-              console.warn(`[REPLENISH] Could not identify roll for item: ${item.name}`);
-            }
-          } else {
-            console.warn(`[REPLENISH] PPF Master not found or has no rolls for category: ${item.category}`);
           }
         }
       }
-    }
 
-    const result = await InvoiceModel.findByIdAndDelete(id);
-    return !!result;
+      const result = await InvoiceModel.findByIdAndDelete(id);
+      return !!result;
+    } catch (error) {
+      console.error("[STORAGE DELETE INVOICE ERROR]", error);
+      throw error;
+    }
   }
 }
 

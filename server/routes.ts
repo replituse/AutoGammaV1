@@ -437,14 +437,17 @@ app.use((req, res, next) => {
     if (!(req.session as any).userId) {
       return res.status(401).send("Unauthorized");
     }
-    console.log(`[DELETE INVOICE] Attempting to delete invoice with ID: ${req.params.id}`);
-    const success = await storage.deleteInvoice(req.params.id);
-    if (!success) {
-      console.log(`[DELETE INVOICE] Invoice not found: ${req.params.id}`);
-      return res.status(404).json({ message: "Invoice not found" });
+    console.log(`[DELETE INVOICE ROUTE] ID: ${req.params.id}`);
+    try {
+      const success = await storage.deleteInvoice(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      res.json({ message: "Invoice deleted" });
+    } catch (error: any) {
+      console.error("[DELETE INVOICE ERROR]", error);
+      res.status(500).json({ message: error.message || "Internal server error" });
     }
-    console.log(`[DELETE INVOICE] Successfully deleted invoice: ${req.params.id}`);
-    res.json({ message: "Invoice deleted" });
   });
 
   app.post("/api/job-cards", async (req, res) => {
