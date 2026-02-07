@@ -311,9 +311,6 @@ export default function CustomerDetailPage() {
                         </div>
                         <div className="flex justify-between items-center">
                           <div>
-                            <p className="text-sm font-semibold">
-                              {inq.inquiryId}
-                            </p>
                             {inq.notes && (
                               <p className="text-xs text-slate-500 mt-1 italic">
                                 "{inq.notes}"
@@ -321,7 +318,6 @@ export default function CustomerDetailPage() {
                             )}
                           </div>
                           <div className="text-right">
-                            <p className="font-bold text-sm">₹{inq.customerPrice}</p>
                             <button 
                               className="text-xs text-red-600 font-semibold flex items-center gap-1 ml-auto mt-1 hover:underline"
                               onClick={() => setLocation("/inquiry")}
