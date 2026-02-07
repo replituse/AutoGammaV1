@@ -178,14 +178,10 @@ Date: ${format(new Date(inquiry.createdAt || new Date()), "MMM dd, yyyy")}
 *SERVICES REQUESTED:*
 ${servicesList || "General Inquiry"}
 
-*PRICING:*
-Our Quote: ₹${(inquiry.ourPrice || 0).toLocaleString()}
-Your Quote: ₹${(inquiry.customerPrice || 0).toLocaleString()}
-
 *SPECIAL NOTES:*
 ${inquiry.notes || "No special notes"}
 
-Please let me know if you have any questions!
+Please let me know if if you have any questions!
 
 Best regards,
 Auto Gamma Car Care Studio`;
