@@ -1335,6 +1335,47 @@ export class MongoStorage implements IStorage {
   }
 
   async deleteInvoice(id: string): Promise<boolean> {
+    const invoice = await InvoiceModel.findById(id);
+    if (!invoice) return false;
+
+    // Replenish PPF stock if there are PPF items
+    if (invoice.items && invoice.items.length > 0) {
+      for (const item of invoice.items) {
+        if (item.type === "PPF" && item.category && item.rollUsed && item.rollUsed > 0) {
+          const ppfMaster = await PPFMasterModel.findById(item.category);
+          if (ppfMaster && ppfMaster.rolls) {
+            // Since Invoice items don't store rollId, we look for the roll used in the JobCard
+            // or match by technician/name if available.
+            // According to the enrichment logic in getInvoices, we can try to find the job card.
+            const jobCard = await JobCardModel.findById(invoice.jobCardId);
+            let rollToReplenish = null;
+
+            if (jobCard && jobCard.ppfs) {
+              const matchingPpf = (jobCard.ppfs as any[]).find(p => p.name === item.name);
+              if (matchingPpf && matchingPpf.rollId) {
+                rollToReplenish = (ppfMaster.rolls as any[]).find(r => 
+                  (r._id && r._id.toString() === matchingPpf.rollId) || r.id === matchingPpf.rollId
+                );
+              }
+            }
+
+            // Fallback: if we still haven't found the roll, look for one that might match description
+            if (!rollToReplenish) {
+               // Try to match by name or just use the first roll if it's a simple setup
+               rollToReplenish = ppfMaster.rolls[0]; 
+            }
+
+            if (rollToReplenish) {
+              rollToReplenish.stock += item.rollUsed;
+              ppfMaster.markModified("rolls");
+              await ppfMaster.save();
+              console.log(`Replenished ${item.rollUsed} sqft to roll ${rollToReplenish.name} for PPF ${ppfMaster.name}`);
+            }
+          }
+        }
+      }
+    }
+
     const result = await InvoiceModel.findByIdAndDelete(id);
     return !!result;
   }
