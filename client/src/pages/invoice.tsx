@@ -725,8 +725,9 @@ export default function InvoicePage() {
                             size="icon" 
                             variant="ghost" 
                             className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => {
-                              if (inv.id && confirm("Are you sure you want to delete this invoice?")) {
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (inv.id && window.confirm("Are you sure you want to delete this invoice? This will also restore any PPF roll quantities consumed.")) {
                                 deleteMutation.mutate(inv.id);
                               }
                             }}
