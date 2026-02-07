@@ -245,10 +245,36 @@ export default function MastersPage() {
 
           <TabsContent value="ppf" className="space-y-6">
             <div className="flex justify-end gap-3">
-              <Button variant="outline" className="flex items-center gap-2" onClick={() => setIsManageVehicleTypesOpen(true)}>
-                <Car className="h-4 w-4" />
-                Manage Vehicle Types
-              </Button>
+              <Dialog open={isManageVehicleTypesOpen} onOpenChange={setIsManageVehicleTypesOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="flex items-center gap-2">
+                    <Car className="h-4 w-4" />
+                    Manage Vehicle Types
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Manage Vehicle Types</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="flex gap-2">
+                      <Input 
+                        placeholder="Vehicle Type Name (e.g. SUV, Sedan)" 
+                        value={newVehicleTypeName}
+                        onChange={(e) => setNewVehicleTypeName(e.target.value)}
+                      />
+                      <Button onClick={() => createVehicleTypeMutation.mutate(newVehicleTypeName)}>Add</Button>
+                    </div>
+                    <div className="space-y-2">
+                      {vehicleTypes.map((type) => (
+                        <div key={type.id} className="flex items-center justify-between p-2 border rounded-md">
+                          <span>{type.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
               <Dialog open={isAddPPFOpen} onOpenChange={setIsAddPPFOpen}>
                 <DialogTrigger asChild>
                   <Button className="flex items-center gap-2">
