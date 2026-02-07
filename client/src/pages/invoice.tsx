@@ -51,50 +51,65 @@ const BUSINESS_INFO = {
 
 function InvoiceItemDetails({ item }: { item: InvoiceItem }) {
   const isPPF = item.type === "PPF";
-  const hasSubDetails = (isPPF && (item.warranty || item.rollUsed || (item.name.includes('(') && item.name.includes(')')))) || 
-                        (item.type === "Accessory" && (item.category || (item.quantity && item.quantity > 1)));
-
+  
+  // Extract main name and details from parentheses if they exist
   let displayName = item.name;
-  let subText = "";
+  let detailText = "";
+  const match = item.name.match(/^(.*?)\s*\((.*?)\)([\s\S]*)$/);
+  if (match) {
+    displayName = match[1];
+    detailText = match[2];
+  }
 
-  if (isPPF) {
-    const match = item.name.match(/^(.*?)\s*\((.*?)\)$/);
-    if (match) {
-      displayName = match[1];
-      subText = match[2];
+  // Check for multi-line content (Quantity info added in add-job.tsx)
+  const lines = item.name.split('\n');
+  const quantityLines = lines.slice(1);
+  const headerLine = lines[0];
+
+  // If we have a newline, the header might have the parentheses we want to strip
+  if (lines.length > 1) {
+    const headerMatch = headerLine.match(/^(.*?)\s*\((.*?)\)$/);
+    if (headerMatch) {
+      displayName = headerMatch[1];
+      detailText = headerMatch[2];
+    } else {
+      displayName = headerLine;
     }
   }
-  
+
   return (
     <div className="space-y-1">
       <div className="font-bold text-slate-900">{displayName}</div>
-      {(hasSubDetails || subText) && (
-        <div className="text-xs text-slate-500 space-y-0.5 pl-2 border-l-2 border-slate-200">
-          {subText && (
-            <div className="text-slate-600 font-medium">{subText}</div>
-          )}
-          {isPPF && (
-            <>
-              {item.warranty && (
-                <div><span className="font-medium text-slate-700">Warranty:</span> {item.warranty}</div>
-              )}
-              {item.rollUsed && item.rollUsed > 0 && (
-                <div><span className="font-medium text-slate-700">Total Sq.ft Roll Used:</span> {item.rollUsed} sq.ft</div>
-              )}
-            </>
-          )}
-          {item.type === "Accessory" && (
-            <>
-              {item.category && (
-                <div><span className="font-medium text-slate-700">Category:</span> {item.category}</div>
-              )}
-              {item.quantity && item.quantity > 1 && (
-                <div><span className="font-medium text-slate-700">Quantity:</span> {item.quantity}</div>
-              )}
-            </>
-          )}
-        </div>
-      )}
+      <div className="text-xs text-slate-500 space-y-0.5 pl-2 border-l-2 border-slate-200">
+        {/* Quantity Info from name (multi-line) */}
+        {quantityLines.map((line, i) => (
+          <div key={i} className="text-slate-600 font-medium">{line.replace(/^[\s,]+/, '')}</div>
+        ))}
+        
+        {/* Detail text from parentheses (e.g. Vehicle Type - Warranty) */}
+        {detailText && (
+          <div className="text-slate-600 font-medium">Warranty:-{detailText.split(' - ').pop()}</div>
+        )}
+
+        {isPPF && (
+          <>
+            {item.rollUsed && item.rollUsed > 0 && (
+              <div className="font-medium text-slate-700">Total Sq.ft Roll Used: {item.rollUsed} sq.ft</div>
+            )}
+          </>
+        )}
+        
+        {item.type === "Accessory" && (
+          <>
+            {item.category && (
+              <div><span className="font-medium text-slate-700">Category:</span> {item.category}</div>
+            )}
+            {item.quantity && item.quantity > 1 && (
+              <div><span className="font-medium text-slate-700">Quantity:</span> {item.quantity}</div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
