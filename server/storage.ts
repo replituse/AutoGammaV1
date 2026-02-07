@@ -1069,29 +1069,49 @@ export class MongoStorage implements IStorage {
 
           for (const newItem of newItems) {
             if (newItem.type === "PPF") {
-              const key = `${newItem.category}_${newItem.name}`;
-              const oldQty = oldRollMap.get(key) || 0;
-              const newQty = (newItem as any).rollUsed || 0;
+              // Group items by roll to handle multiple rolls for the same PPF category
+              const newItemName = newItem.name || "";
+              const rollMatches = Array.from(newItemName.matchAll(/(?:Quantity:\s*)?([\d.]+)sqft\s*\(from\s*(.*?)\)/g));
+              
+              for (const match of rollMatches) {
+                const typedMatch = match as RegExpMatchArray;
+                const newQty = parseFloat(typedMatch[1]);
+                const rollName = typedMatch[2].split(/[,\s)]/)[0].trim();
+                
+                // Construct a unique key for this specific roll under this PPF category
+                const key = `${newItem.category}_${rollName}`;
+                
+                // Calculate total old quantity for this specific roll from existing invoice
+                let oldQty = 0;
+                oldItems.forEach(oldItem => {
+                  if (oldItem.type === "PPF" && oldItem.category === newItem.category) {
+                    const oldItemName = oldItem.name || "";
+                    const oldMatches = Array.from(oldItemName.matchAll(/(?:Quantity:\s*)?([\d.]+)sqft\s*\(from\s*(.*?)\)/g));
+                    oldMatches.forEach(oldMatch => {
+                      if (oldMatch[2].split(/[,\s)]/)[0].trim() === rollName) {
+                        oldQty += parseFloat(oldMatch[1]);
+                      }
+                    });
+                  }
+                });
 
-              // Only deduct if new quantity is greater than old quantity
-              if (newQty > oldQty) {
-                const deductQty = newQty - oldQty;
-                const ppfId = (newItem as any).category;
-                if (ppfId && mongoose.Types.ObjectId.isValid(ppfId)) {
-                  const ppfMaster = await PPFMasterModel.findById(ppfId);
-                  if (ppfMaster && ppfMaster.rolls) {
-                    const rollMatch = (newItem.name || "").match(/\(from (.*?)\)/);
-                    const rollName = rollMatch ? rollMatch[1].split(/[,\s)]/)[0].trim() : "";
-                    
-                    const roll = (ppfMaster.rolls as any[]).find(r => 
-                      r.name === rollName || (r.name && rollName && r.name.toLowerCase().includes(rollName.toLowerCase()))
-                    );
+                // Only deduct if new quantity is greater than old quantity
+                if (newQty > oldQty) {
+                  const deductQty = newQty - oldQty;
+                  const ppfId = (newItem as any).category;
+                  if (ppfId && mongoose.Types.ObjectId.isValid(ppfId)) {
+                    const ppfMaster = await PPFMasterModel.findById(ppfId);
+                    if (ppfMaster && ppfMaster.rolls) {
+                      const roll = (ppfMaster.rolls as any[]).find(r => 
+                        r.name === rollName || (r.name && rollName && r.name.toLowerCase().includes(rollName.toLowerCase()))
+                      );
 
-                    if (roll) {
-                      roll.stock -= deductQty;
-                      ppfMaster.markModified("rolls");
-                      await ppfMaster.save();
-                      console.log(`[JOB CARD UPDATE EXCEPTION] Deducted incremental ${deductQty} sqft from roll ${roll.name} (Old: ${oldQty}, New: ${newQty})`);
+                      if (roll) {
+                        roll.stock -= deductQty;
+                        ppfMaster.markModified("rolls");
+                        await ppfMaster.save();
+                        console.log(`[JOB CARD UPDATE EXCEPTION] Deducted incremental ${deductQty} sqft from roll ${roll.name} (Old: ${oldQty}, New: ${newQty})`);
+                      }
                     }
                   }
                 }
