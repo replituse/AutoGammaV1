@@ -1067,15 +1067,18 @@ export class MongoStorage implements IStorage {
             }
           });
 
+          // Calculate total roll used for the updated invoice items
           for (const newItem of newItems) {
             if (newItem.type === "PPF") {
-              // Group items by roll to handle multiple rolls for the same PPF category
               const newItemName = newItem.name || "";
               const rollMatches = Array.from(newItemName.matchAll(/(?:Quantity:\s*)?([\d.]+)sqft\s*\(from\s*(.*?)\)/g));
               
+              let totalRollUsedForItem = 0;
               for (const match of rollMatches) {
                 const typedMatch = match as RegExpMatchArray;
-                const newQty = parseFloat(typedMatch[1]);
+                const qty = parseFloat(typedMatch[1]);
+                totalRollUsedForItem += qty;
+
                 const rollName = typedMatch[2].split(/[,\s)]/)[0].trim();
                 
                 // Construct a unique key for this specific roll under this PPF category
@@ -1096,8 +1099,8 @@ export class MongoStorage implements IStorage {
                 });
 
                 // Only deduct if new quantity is greater than old quantity
-                if (newQty > oldQty) {
-                  const deductQty = newQty - oldQty;
+                if (qty > oldQty) {
+                  const deductQty = qty - oldQty;
                   const ppfId = (newItem as any).category;
                   if (ppfId && mongoose.Types.ObjectId.isValid(ppfId)) {
                     const ppfMaster = await PPFMasterModel.findById(ppfId);
@@ -1110,12 +1113,14 @@ export class MongoStorage implements IStorage {
                         roll.stock -= deductQty;
                         ppfMaster.markModified("rolls");
                         await ppfMaster.save();
-                        console.log(`[JOB CARD UPDATE EXCEPTION] Deducted incremental ${deductQty} sqft from roll ${roll.name} (Old: ${oldQty}, New: ${newQty})`);
+                        console.log(`[JOB CARD UPDATE EXCEPTION] Deducted incremental ${deductQty} sqft from roll ${roll.name} (Old: ${oldQty}, New: ${qty})`);
                       }
                     }
                   }
                 }
               }
+              // Update the item's rollUsed field with the sum of all rolls
+              newItem.rollUsed = totalRollUsedForItem;
             }
           }
 
@@ -1142,9 +1147,9 @@ export class MongoStorage implements IStorage {
           });
         } else {
           // Deduct PPF roll stock before creating the first invoice for this business
-          for (const ppfItem of (j as any).ppfs || []) {
-            if ((ppfItem as any).business === biz) {
-              const ppfId = (ppfItem as any).ppfId || ppfItem.id;
+          for (const ppfItem of bizItems) {
+            if (ppfItem.type === "PPF") {
+              const ppfId = (ppfItem as any).category;
               let ppfMaster = null;
 
               if (ppfId && mongoose.Types.ObjectId.isValid(ppfId)) {
@@ -1160,27 +1165,15 @@ export class MongoStorage implements IStorage {
 
               if (ppfMaster && ppfMaster.rolls) {
                 let deducted = false;
-                const rollsUsed = (ppfItem as any).rollsUsed;
-                const rollsToDeduct = (rollsUsed && rollsUsed.length > 0) ? rollsUsed : 
-                                     (ppfItem.rollId ? [{ rollId: ppfItem.rollId, rollUsed: (ppfItem as any).rollUsed || 0 }] : []);
-
-                if (rollsToDeduct.length > 0) {
-                  for (const entry of rollsToDeduct) {
-                    const roll = (ppfMaster.rolls as any[]).find(r =>
-                      (r._id && r._id.toString() === entry.rollId) || r.id === entry.rollId || r.name === entry.rollId
-                    );
-                    if (roll && entry.rollUsed > 0) {
-                      roll.stock -= entry.rollUsed;
-                      deducted = true;
-                      console.log(`Deducted ${entry.rollUsed} sqft from roll ${roll.name} for JobCard update (New Invoice)`);
-                    }
-                  }
-                } else if (ppfItem.name) {
+                let totalRollUsedForItem = 0;
+                
+                if (ppfItem.name) {
                   // Fallback: Parse from name if no explicit roll data
                   const rollMatches = Array.from((ppfItem.name || "").matchAll(/(?:Quantity:\s*)?([\d.]+)sqft\s*\(from\s*(.*?)\)/g));
                   for (const match of rollMatches) {
                     const typedMatch = match as RegExpMatchArray;
                     const qty = parseFloat(typedMatch[1]);
+                    totalRollUsedForItem += qty;
                     const rawRollName = typedMatch[2].split(/[,\s)]/)[0].trim();
                     const roll = (ppfMaster.rolls as any[]).find(r =>
                       r.name === rawRollName ||
@@ -1193,6 +1186,8 @@ export class MongoStorage implements IStorage {
                       console.log(`Deducted ${qty} sqft from roll ${roll.name} for JobCard update (Parsed from name)`);
                     }
                   }
+                  // Update the item's rollUsed field
+                  ppfItem.rollUsed = totalRollUsedForItem;
                 }
 
                 if (deducted) {
@@ -1574,44 +1569,56 @@ export class MongoStorage implements IStorage {
       const oldItems = existingInvoice.items || [];
       const newItems = invoice.items;
 
-      // Group old rolls for comparison
-      const oldRollMap = new Map<string, number>();
-      oldItems.forEach(item => {
-        if (item.type === "PPF") {
-          const key = `${item.category}_${item.name}`;
-          oldRollMap.set(key, (oldRollMap.get(key) || 0) + (item.rollUsed || 0));
-        }
-      });
-
       for (const newItem of newItems) {
         if (newItem.type === "PPF") {
-          const key = `${newItem.category}_${newItem.name}`;
-          const oldQty = oldRollMap.get(key) || 0;
-          const newQty = newItem.rollUsed || 0;
+          const newItemName = newItem.name || "";
+          const rollMatches = Array.from(newItemName.matchAll(/(?:Quantity:\s*)?([\d.]+)sqft\s*\(from\s*(.*?)\)/g));
+          
+          let totalRollUsedForItem = 0;
+          for (const match of rollMatches) {
+            const typedMatch = match as RegExpMatchArray;
+            const qty = parseFloat(typedMatch[1]);
+            totalRollUsedForItem += qty;
 
-          // Only deduct if new quantity is greater than old quantity
-          if (newQty > oldQty) {
-            const deductQty = newQty - oldQty;
-            const ppfId = newItem.category;
-            if (ppfId && mongoose.Types.ObjectId.isValid(ppfId)) {
-              const ppfMaster = await PPFMasterModel.findById(ppfId);
-              if (ppfMaster && ppfMaster.rolls) {
-                const rollMatch = (newItem.name || "").match(/\(from (.*?)\)/);
-                const rollName = rollMatch ? rollMatch[1].split(/[,\s)]/)[0].trim() : "";
-                
-                const roll = (ppfMaster.rolls as any[]).find(r => 
-                  r.name === rollName || (r.name && rollName && r.name.toLowerCase().includes(rollName.toLowerCase()))
-                );
+            const rollName = typedMatch[2].split(/[,\s)]/)[0].trim();
+            
+            // Calculate total old quantity for this specific roll from existing invoice
+            let oldQty = 0;
+            oldItems.forEach(oldItem => {
+              if (oldItem.type === "PPF" && oldItem.category === newItem.category) {
+                const oldItemName = oldItem.name || "";
+                const oldMatches = Array.from(oldItemName.matchAll(/(?:Quantity:\s*)?([\d.]+)sqft\s*\(from\s*(.*?)\)/g));
+                oldMatches.forEach(oldMatch => {
+                  if (oldMatch[2].split(/[,\s)]/)[0].trim() === rollName) {
+                    oldQty += parseFloat(oldMatch[1]);
+                  }
+                });
+              }
+            });
 
-                if (roll) {
-                  roll.stock -= deductQty;
-                  ppfMaster.markModified("rolls");
-                  await ppfMaster.save();
-                  console.log(`[INVOICE EXCEPTION] Deducted incremental ${deductQty} sqft from roll ${roll.name} (Old: ${oldQty}, New: ${newQty})`);
+            // Only deduct if new quantity is greater than old quantity
+            if (qty > oldQty) {
+              const deductQty = qty - oldQty;
+              const ppfId = newItem.category;
+              if (ppfId && mongoose.Types.ObjectId.isValid(ppfId)) {
+                const ppfMaster = await PPFMasterModel.findById(ppfId);
+                if (ppfMaster && ppfMaster.rolls) {
+                  const roll = (ppfMaster.rolls as any[]).find(r => 
+                    r.name === rollName || (r.name && rollName && r.name.toLowerCase().includes(rollName.toLowerCase()))
+                  );
+
+                  if (roll) {
+                    roll.stock -= deductQty;
+                    ppfMaster.markModified("rolls");
+                    await ppfMaster.save();
+                    console.log(`[INVOICE UPDATE EXCEPTION] Deducted incremental ${deductQty} sqft from roll ${roll.name} (Old: ${oldQty}, New: ${qty})`);
+                  }
                 }
               }
             }
           }
+          // Update the item's rollUsed field with the sum of all rolls
+          newItem.rollUsed = totalRollUsedForItem;
         }
       }
     }
