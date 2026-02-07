@@ -1528,6 +1528,50 @@ export class MongoStorage implements IStorage {
   }
 
   async updateInvoice(id: string, invoice: Partial<Invoice>): Promise<Invoice | undefined> {
+    const existingInvoice = await InvoiceModel.findById(id);
+    if (!existingInvoice) return undefined;
+
+    // Logic for deducting roll quantities ONLY for newly added rolls
+    if (invoice.items) {
+      const oldItems = existingInvoice.items || [];
+      const newItems = invoice.items;
+
+      for (const newItem of newItems) {
+        if (newItem.type === "PPF") {
+          // Check if this roll was already in the invoice
+          // A roll is considered "new" if no item in oldItems matches its PPF ID and roll details
+          const isNewRoll = !oldItems.some(oldItem => 
+            oldItem.type === "PPF" && 
+            oldItem.name === newItem.name && 
+            oldItem.rollUsed === newItem.rollUsed
+          );
+
+          if (isNewRoll) {
+            const ppfId = newItem.category; // category stores ppfId for stock replenishment logic
+            if (ppfId && mongoose.Types.ObjectId.isValid(ppfId)) {
+              const ppfMaster = await PPFMasterModel.findById(ppfId);
+              if (ppfMaster && ppfMaster.rolls && newItem.rollUsed) {
+                // Try to find the roll name from the item name string if rollId isn't explicit
+                const rollMatch = (newItem.name || "").match(/\(from (.*?)\)/);
+                const rollName = rollMatch ? rollMatch[1].split(/[,\s)]/)[0].trim() : "";
+                
+                const roll = (ppfMaster.rolls as any[]).find(r => 
+                  r.name === rollName || (r.name && rollName && r.name.toLowerCase().includes(rollName.toLowerCase()))
+                );
+
+                if (roll && newItem.rollUsed > 0) {
+                  roll.stock -= newItem.rollUsed;
+                  ppfMaster.markModified("rolls");
+                  await ppfMaster.save();
+                  console.log(`Deducted ${newItem.rollUsed} sqft from roll ${roll.name} for newly added item in Invoice update`);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
     const inv = await InvoiceModel.findByIdAndUpdate(id, invoice, { new: true });
     if (!inv) return undefined;
     const obj = inv.toObject();
