@@ -1076,6 +1076,34 @@ export class MongoStorage implements IStorage {
             payments: (j as any).payments || []
           });
         } else {
+          // Deduct PPF roll stock before creating the first invoice for this business
+          for (const ppfItem of (j as any).ppfs || []) {
+            if ((ppfItem as any).business === biz) {
+              const ppfId = (ppfItem as any).ppfId || ppfItem.id;
+              const rollsToDeduct = (ppfItem as any).rollsUsed || (ppfItem.rollId ? [{
+                rollId: ppfItem.rollId,
+                rollUsed: (ppfItem as any).rollUsed || 0
+              }] : []);
+
+              if (rollsToDeduct.length > 0 && ppfId) {
+                const ppfMaster = await PPFMasterModel.findById(ppfId);
+                if (ppfMaster && ppfMaster.rolls) {
+                  for (const entry of rollsToDeduct) {
+                    const roll = (ppfMaster.rolls as any[]).find(r => 
+                      (r._id && r._id.toString() === entry.rollId) || r.id === entry.rollId
+                    );
+                    if (roll && entry.rollUsed > 0) {
+                      roll.stock -= entry.rollUsed;
+                      console.log(`Deducted ${entry.rollUsed} sqft from roll ${roll.name} for JobCard update (New Invoice)`);
+                    }
+                  }
+                  ppfMaster.markModified("rolls");
+                  await ppfMaster.save();
+                }
+              }
+            }
+          }
+
           // Create new invoice if it doesn't exist
           const invCount = await InvoiceModel.countDocuments({ business: biz });
           const bizPrefix = biz === "Auto Gamma" ? "AG" : "AGNX";
