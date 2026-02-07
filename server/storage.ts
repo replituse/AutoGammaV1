@@ -889,11 +889,26 @@ export class MongoStorage implements IStorage {
       const oldPpfs = existingJob.ppfs || [];
       const newPpfs = jobCard.ppfs;
 
+      // Check if an invoice exists for each business
+      const businesses = ["Auto Gamma", "AGNX"] as const;
+      const invoiceStatus = new Map<string, boolean>();
+      for (const biz of businesses) {
+        const existingInvoice = await InvoiceModel.findOne({ jobCardId: id, business: biz });
+        invoiceStatus.set(biz, !!existingInvoice);
+      }
+
       // 1. Group roll adjustments by ppfId and rollId
       const adjustments = new Map<string, Map<string, number>>();
 
-      // Deduct new quantities
+      // Deduct new quantities only if invoice doesn't exist (it will be created)
       for (const ppfItem of newPpfs) {
+        const biz = (ppfItem as any).business || "Auto Gamma";
+        if (invoiceStatus.get(biz)) {
+          // Invoice already exists, skip deduction for this item
+          console.log(`[UPDATE JOB CARD] Invoice exists for ${biz}, skipping PPF deduction for ${ppfItem.name}`);
+          continue;
+        }
+
         const ppfId = (ppfItem as any).ppfId || ppfItem.id;
         const rolls = (ppfItem as any).rollsUsed || [];
         
@@ -915,30 +930,16 @@ export class MongoStorage implements IStorage {
         }
       }
 
-      // Add back old quantities
-      for (const ppfItem of oldPpfs) {
-        const ppfId = (ppfItem as any).ppfId || ppfItem.id;
-        const rolls = (ppfItem as any).rollsUsed || [];
-        
-        // If rollsUsed is missing but rollId/rollUsed exist, use them
-        if (rolls.length === 0 && (ppfItem as any).rollId) {
-          rolls.push({
-            rollId: (ppfItem as any).rollId,
-            rollUsed: (ppfItem as any).rollUsed || 0
-          });
-        }
-
-        if (!adjustments.has(ppfId)) adjustments.set(ppfId, new Map());
-        const ppfAdjustments = adjustments.get(ppfId)!;
-
-        for (const entry of rolls) {
-          if (!entry.rollId) continue;
-          const current = ppfAdjustments.get(entry.rollId) || 0;
-          ppfAdjustments.set(entry.rollId, current - entry.rollUsed);
-        }
-      }
-
+      // Add back old quantities - only if we actually deducted them before
+      // But we don't know if we did. The requirement says:
+      // "if its invoice is not already in the invoice section ... then deduct the ppf roll amount ... as it creates a new invoice"
+      // "if a invoice already exist ... then dont deduct the rolls quantity"
+      // This implies we only adjust stock when we are about to create a NEW invoice.
+      
       // 2. Apply adjustments (delta = new - old)
+      // Actually, since we are only deducting for NEW invoices, we don't need to "add back old" in the same way.
+      // If we are updating an existing job card that already has an invoice, we do nothing to stock.
+      // If we are updating an existing job card that does NOT have an invoice (user deleted it), we deduct the NEW quantities.
       for (const entry of Array.from(adjustments.entries())) {
         const ppfId = entry[0];
         const ppfAdjustments = entry[1];
@@ -955,7 +956,7 @@ export class MongoStorage implements IStorage {
             if (roll) {
               roll.stock -= delta;
               modified = true;
-              console.log(`Adjusted roll ${roll.name} by ${-delta} sqft (delta was ${delta}) during JobCard update`);
+              console.log(`Deducted ${delta} sqft from roll ${roll.name} during JobCard update (new invoice will be created)`);
             }
           }
           if (modified) {
