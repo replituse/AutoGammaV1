@@ -195,7 +195,7 @@ export default function AddJobPage() {
         })),
         ppfs: (jobToEdit.ppfs || []).reduce((acc: any[], p: any) => {
           const ppfId = String((p as any).ppfId || (p as any).id || (p as any)._id);
-          const warranty = (p as any).warranty || p.name.match(/\((.*)\)/)?.[1]?.split(" - ")?.[1] || "";
+          const warranty = (p as any).warranty || p.name?.match(/\((.*)\)/)?.[1]?.split(" - ")?.[1] || "";
           
           console.log('Mapping PPF entry:', { ppfId, warranty, original: p });
           
@@ -211,13 +211,13 @@ export default function AddJobPage() {
             
             // Rebuild the name by aggregating quantities from the name strings
             // We need to parse all quantities from the incoming name too
-            const rollMatches = p.name.matchAll(/Quantity: (\d+(?:\.\d+)?)sqft \(from (.*?)\)/g);
+            const rollMatches = (p.name || "").matchAll(/Quantity: (\d+(?:\.\d+)?)sqft \(from (.*?)\)/g);
             for (const match of rollMatches) {
               const qty = match[1];
               const rollName = match[2];
               
               const existingRollRegex = new RegExp(`Quantity: (\\d+(?:\\.\\d+)?)sqft \\(from ${rollName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`);
-              const existingRollMatch = existing.name.match(existingRollRegex);
+              const existingRollMatch = (existing.name || "").match(existingRollRegex);
               
               if (existingRollMatch) {
                 const oldQty = parseFloat(existingRollMatch[1]);
