@@ -849,6 +849,17 @@ export class MongoStorage implements IStorage {
 
     // Deduct PPF roll inventory
     if (jobCard.ppfs && jobCard.ppfs.length > 0) {
+      // Check if an invoice exists for each business
+      const businesses = ["Auto Gamma", "AGNX"] as const;
+      const invoiceStatus = new Map<string, boolean>();
+      for (const biz of businesses) {
+        // We can't check by ID here since it's a new job card, but we check if an invoice with this jobCardId exists
+        // Wait, for createJobCard, the jobCardId is j._id which we just created.
+        // So an invoice definitely doesn't exist yet for a brand new job card.
+        // However, the user might be referring to "same issue" as in stock is being deducted when it shouldn't.
+        // In createJobCard, we always create invoices, so we should always deduct stock.
+      }
+
       for (const ppfItem of jobCard.ppfs) {
         const ppfId = (ppfItem as any).ppfId || ppfItem.id;
         const rollsToDeduct = (ppfItem as any).rollsUsed || (ppfItem.rollId ? [{
@@ -903,7 +914,9 @@ export class MongoStorage implements IStorage {
       // Deduct new quantities only if invoice doesn't exist (it will be created)
       for (const ppfItem of newPpfs) {
         const biz = (ppfItem as any).business || "Auto Gamma";
-        if (invoiceStatus.get(biz)) {
+        const hasInvoice = invoiceStatus.get(biz);
+        
+        if (hasInvoice) {
           // Invoice already exists, skip deduction for this item
           console.log(`[UPDATE JOB CARD] Invoice exists for ${biz}, skipping PPF deduction for ${ppfItem.name}`);
           continue;
@@ -930,11 +943,15 @@ export class MongoStorage implements IStorage {
         }
       }
 
-      // Add back old quantities - only if we actually deducted them before
-      // But we don't know if we did. The requirement says:
-      // "if its invoice is not already in the invoice section ... then deduct the ppf roll amount ... as it creates a new invoice"
-      // "if a invoice already exist ... then dont deduct the rolls quantity"
-      // This implies we only adjust stock when we are about to create a NEW invoice.
+      // Add back old quantities - only if we actually deducted them before (i.e., invoice was deleted)
+      // If the invoice was deleted, we already replenished the stock in deleteInvoice.
+      // So when we "update" the job card, if the invoice is missing, we deduct the NEW quantities.
+      // This part is actually correct in the current logic (only deducting for new invoices).
+      
+      // However, we MUST NOT add back old quantities if the invoice STILL EXISTS, 
+      // because we didn't deduct them in this update call, and we shouldn't "re-deduct" or "re-add".
+      // The previous code was adding back old quantities UNCONDITIONALLY, which caused issues.
+      // I removed the "Add back old quantities" loop in the previous edit, which is correct for the requirement.
       
       // 2. Apply adjustments (delta = new - old)
       // Actually, since we are only deducting for NEW invoices, we don't need to "add back old" in the same way.
