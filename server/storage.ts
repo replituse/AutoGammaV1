@@ -1424,6 +1424,19 @@ export class MongoStorage implements IStorage {
                 }
                 if (foundInDescription) replenished = true;
               }
+            } else if (!replenished && item.name && item.name.includes("sqft")) {
+               // Fallback for descriptions like "Garware Elite (Small Cars) - 400sqft" or similar if Roll name is missing but qty exists
+               console.log(`[REPLENISH] Attempting simple qty fallback for: ${item.name}`);
+               const qtyMatch = item.name.match(/([\d.]+)sqft/);
+               if (qtyMatch && qtyMatch[1] && ppfMaster.rolls.length === 1) {
+                 const qty = parseFloat(qtyMatch[1]);
+                 const roll = ppfMaster.rolls[0] as any;
+                 if (roll && !isNaN(qty)) {
+                   roll.stock += qty;
+                   replenished = true;
+                   console.log(`[REPLENISH] Replenished ${qty} sqft to single roll ${roll.name} via simple qty fallback`);
+                 }
+               }
             }
 
             // Strategy C: Single roll name fallback "(from Roll1)"
