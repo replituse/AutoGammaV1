@@ -886,52 +886,63 @@ export class MongoStorage implements IStorage {
 
     // Handle PPF stock adjustments if ppfs are being updated
     if (jobCard.ppfs) {
-      // 1. Revert previous deductions
-      if (existingJob.ppfs && existingJob.ppfs.length > 0) {
-        for (const ppfItem of existingJob.ppfs) {
-          const ppfId = (ppfItem as any).ppfId || ppfItem.id;
-          const rollsToRevert = (ppfItem as any).rollsUsed || (ppfItem.rollId ? [{
-            rollId: ppfItem.rollId,
-            rollUsed: (ppfItem as any).rollUsed
-          }] : []);
+      const oldPpfs = existingJob.ppfs || [];
+      const newPpfs = jobCard.ppfs;
 
-          if (rollsToRevert.length > 0 && ppfId) {
-            const ppfMaster = await PPFMasterModel.findById(ppfId);
-            if (ppfMaster && ppfMaster.rolls) {
-              for (const entry of rollsToRevert) {
-                const roll = (ppfMaster.rolls as any[]).find(r => 
-                  (r._id && r._id.toString() === entry.rollId) || r.id === entry.rollId
-                );
-                if (roll && entry.rollUsed > 0) {
-                  roll.stock += entry.rollUsed;
-                }
-              }
-              ppfMaster.markModified("rolls");
-              await ppfMaster.save();
-            }
-          }
+      // 1. Group roll adjustments by ppfId and rollId
+      const adjustments = new Map<string, Map<string, number>>();
+
+      // Deduct new quantities
+      for (const ppfItem of newPpfs) {
+        const ppfId = (ppfItem as any).ppfId || ppfItem.id;
+        const rolls = (ppfItem as any).rollsUsed || (ppfItem.rollId ? [{
+          rollId: ppfItem.rollId,
+          rollUsed: (ppfItem as any).rollUsed || 0
+        }] : []);
+
+        if (!adjustments.has(ppfId)) adjustments.set(ppfId, new Map());
+        const ppfAdjustments = adjustments.get(ppfId)!;
+
+        for (const entry of rolls) {
+          const current = ppfAdjustments.get(entry.rollId) || 0;
+          ppfAdjustments.set(entry.rollId, current + entry.rollUsed);
         }
       }
 
-      // 2. Apply new deductions
-      for (const ppfItem of jobCard.ppfs) {
+      // Add back old quantities
+      for (const ppfItem of oldPpfs) {
         const ppfId = (ppfItem as any).ppfId || ppfItem.id;
-        const rollsToDeduct = (ppfItem as any).rollsUsed || (ppfItem.rollId ? [{
+        const rolls = (ppfItem as any).rollsUsed || (ppfItem.rollId ? [{
           rollId: ppfItem.rollId,
-          rollUsed: (ppfItem as any).rollUsed
+          rollUsed: (ppfItem as any).rollUsed || 0
         }] : []);
 
-        if (rollsToDeduct.length > 0 && ppfId) {
-          const ppfMaster = await PPFMasterModel.findById(ppfId);
-          if (ppfMaster && ppfMaster.rolls) {
-            for (const entry of rollsToDeduct) {
-              const roll = (ppfMaster.rolls as any[]).find(r => 
-                (r._id && r._id.toString() === entry.rollId) || r.id === entry.rollId
-              );
-              if (roll && entry.rollUsed > 0) {
-                roll.stock -= entry.rollUsed;
-              }
+        if (!adjustments.has(ppfId)) adjustments.set(ppfId, new Map());
+        const ppfAdjustments = adjustments.get(ppfId)!;
+
+        for (const entry of rolls) {
+          const current = ppfAdjustments.get(entry.rollId) || 0;
+          ppfAdjustments.set(entry.rollId, current - entry.rollUsed);
+        }
+      }
+
+      // 2. Apply adjustments (delta = new - old)
+      for (const [ppfId, ppfAdjustments] of adjustments) {
+        const ppfMaster = await PPFMasterModel.findById(ppfId);
+        if (ppfMaster && ppfMaster.rolls) {
+          let modified = false;
+          for (const [rollId, delta] of ppfAdjustments) {
+            if (delta === 0) continue;
+            const roll = (ppfMaster.rolls as any[]).find(r => 
+              (r._id && r._id.toString() === rollId) || r.id === rollId
+            );
+            if (roll) {
+              roll.stock -= delta;
+              modified = true;
+              console.log(`Adjusted roll ${roll.name} by ${-delta} sqft (delta was ${delta}) during JobCard update`);
             }
+          }
+          if (modified) {
             ppfMaster.markModified("rolls");
             await ppfMaster.save();
           }
@@ -1449,12 +1460,14 @@ export class MongoStorage implements IStorage {
 
       // Replenish PPF stock if there are PPF items
       if (invoice.items && invoice.items.length > 0) {
+        // Try to find the original Job Card to get exact roll used data
+        const jobCard = invoice.jobCardId ? await JobCardModel.findById(invoice.jobCardId) : null;
+
         for (const item of invoice.items) {
-          if (item.type === "PPF" && item.rollUsed && item.rollUsed > 0) {
-            console.log(`[REPLENISH] Processing PPF item: ${item.name}, rollUsed: ${item.rollUsed}`);
+          if (item.type === "PPF") {
+            console.log(`[REPLENISH] Processing PPF item: ${item.name}`);
             
             let ppfMaster = null;
-            
             // Try by category ID first (newly created invoices)
             if (item.category && mongoose.Types.ObjectId.isValid(item.category)) {
               ppfMaster = await PPFMasterModel.findById(item.category);
@@ -1471,25 +1484,47 @@ export class MongoStorage implements IStorage {
             if (ppfMaster && ppfMaster.rolls) {
               let replenished = false;
 
-              // Parse roll name from description (multi-roll support)
-              // Match patterns like: "Quantity: 400sqft (from Roll2)" or "400sqft (from Roll2)"
-              const rollMatches = Array.from((item.name || "").matchAll(/(?:Quantity:\s*)?([\d.]+)sqft\s*\(from\s*(.*?)\)/g));
-              
-              if (rollMatches.length > 0) {
-                for (const match of rollMatches) {
-                  const qty = parseFloat(match[1]);
-                  const rawRollName = match[2].split(/[,\s)]/)[0].trim();
-                  
-                  const roll = (ppfMaster.rolls as any[]).find(r => 
-                    r.name === rawRollName || 
-                    (r.name && r.name.toLowerCase().includes(rawRollName.toLowerCase())) ||
-                    (rawRollName.toLowerCase().includes(r.name.toLowerCase()))
-                  );
+              // Priority 1: Use exact roll data from Job Card if available
+              if (jobCard && jobCard.ppfs) {
+                const matchingPpf = (jobCard.ppfs as any[]).find(p => p.name === item.name || (p.ppfId || p.id) === item.category);
+                if (matchingPpf) {
+                  const rollsToRevert = (matchingPpf as any).rollsUsed || (matchingPpf.rollId ? [{
+                    rollId: matchingPpf.rollId,
+                    rollUsed: (matchingPpf as any).rollUsed || 0
+                  }] : []);
 
-                  if (roll && !isNaN(qty)) {
-                    roll.stock += qty;
-                    replenished = true;
-                    console.log(`[REPLENISH] Added ${qty} to ${roll.name}`);
+                  for (const entry of rollsToRevert) {
+                    const roll = (ppfMaster.rolls as any[]).find(r => 
+                      (r._id && r._id.toString() === entry.rollId) || r.id === entry.rollId
+                    );
+                    if (roll && entry.rollUsed > 0) {
+                      roll.stock += entry.rollUsed;
+                      replenished = true;
+                      console.log(`[REPLENISH] Added ${entry.rollUsed} to ${roll.name} from Job Card data`);
+                    }
+                  }
+                }
+              }
+
+              // Priority 2: Fallback to parsing from item name if Job Card data wasn't found or didn't match
+              if (!replenished) {
+                const rollMatches = Array.from((item.name || "").matchAll(/(?:Quantity:\s*)?([\d.]+)sqft\s*\(from\s*(.*?)\)/g));
+                if (rollMatches.length > 0) {
+                  for (const match of rollMatches) {
+                    const qty = parseFloat(match[1]);
+                    const rawRollName = match[2].split(/[,\s)]/)[0].trim();
+                    
+                    const roll = (ppfMaster.rolls as any[]).find(r => 
+                      r.name === rawRollName || 
+                      (r.name && r.name.toLowerCase().includes(rawRollName.toLowerCase())) ||
+                      (rawRollName.toLowerCase().includes(r.name.toLowerCase()))
+                    );
+
+                    if (roll && !isNaN(qty)) {
+                      roll.stock += qty;
+                      replenished = true;
+                      console.log(`[REPLENISH] Added ${qty} to ${roll.name} from parsed name`);
+                    }
                   }
                 }
               }
