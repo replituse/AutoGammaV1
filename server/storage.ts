@@ -1054,6 +1054,51 @@ export class MongoStorage implements IStorage {
         const totalAmount = Math.round(subtotalAfterDiscount + gstAmount);
         
         if (existingInvoice) {
+          // EXCEPTION - Logic for deducting incremental roll quantities when updating job card
+          const oldItems = existingInvoice.items || [];
+          const newItems = bizItems;
+
+          // Group old rolls for comparison
+          const oldRollMap = new Map<string, number>();
+          oldItems.forEach(item => {
+            if (item.type === "PPF") {
+              const key = `${item.category}_${item.name}`;
+              oldRollMap.set(key, (oldRollMap.get(key) || 0) + (item.rollUsed || 0));
+            }
+          });
+
+          for (const newItem of newItems) {
+            if (newItem.type === "PPF") {
+              const key = `${newItem.category}_${newItem.name}`;
+              const oldQty = oldRollMap.get(key) || 0;
+              const newQty = (newItem as any).rollUsed || 0;
+
+              // Only deduct if new quantity is greater than old quantity
+              if (newQty > oldQty) {
+                const deductQty = newQty - oldQty;
+                const ppfId = (newItem as any).category;
+                if (ppfId && mongoose.Types.ObjectId.isValid(ppfId)) {
+                  const ppfMaster = await PPFMasterModel.findById(ppfId);
+                  if (ppfMaster && ppfMaster.rolls) {
+                    const rollMatch = (newItem.name || "").match(/\(from (.*?)\)/);
+                    const rollName = rollMatch ? rollMatch[1].split(/[,\s)]/)[0].trim() : "";
+                    
+                    const roll = (ppfMaster.rolls as any[]).find(r => 
+                      r.name === rollName || (r.name && rollName && r.name.toLowerCase().includes(rollName.toLowerCase()))
+                    );
+
+                    if (roll) {
+                      roll.stock -= deductQty;
+                      ppfMaster.markModified("rolls");
+                      await ppfMaster.save();
+                      console.log(`[JOB CARD UPDATE EXCEPTION] Deducted incremental ${deductQty} sqft from roll ${roll.name} (Old: ${oldQty}, New: ${newQty})`);
+                    }
+                  }
+                }
+              }
+            }
+          }
+
           // Update existing invoice
           await InvoiceModel.findByIdAndUpdate(existingInvoice._id, {
             customerName: j.customerName,
