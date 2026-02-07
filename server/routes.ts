@@ -437,8 +437,13 @@ app.use((req, res, next) => {
     if (!(req.session as any).userId) {
       return res.status(401).send("Unauthorized");
     }
+    console.log(`[DELETE INVOICE] Attempting to delete invoice with ID: ${req.params.id}`);
     const success = await storage.deleteInvoice(req.params.id);
-    if (!success) return res.status(404).json({ message: "Invoice not found" });
+    if (!success) {
+      console.log(`[DELETE INVOICE] Invoice not found: ${req.params.id}`);
+      return res.status(404).json({ message: "Invoice not found" });
+    }
+    console.log(`[DELETE INVOICE] Successfully deleted invoice: ${req.params.id}`);
     res.json({ message: "Invoice deleted" });
   });
 

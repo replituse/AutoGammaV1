@@ -370,6 +370,8 @@ export default function InvoicePage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/masters/ppf"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       toast({ title: "Success", description: "Invoice deleted successfully" });
     },
     onError: (error: any) => {
