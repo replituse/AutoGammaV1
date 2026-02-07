@@ -1080,23 +1080,57 @@ export class MongoStorage implements IStorage {
           for (const ppfItem of (j as any).ppfs || []) {
             if ((ppfItem as any).business === biz) {
               const ppfId = (ppfItem as any).ppfId || ppfItem.id;
-              const rollsToDeduct = (ppfItem as any).rollsUsed || (ppfItem.rollId ? [{
-                rollId: ppfItem.rollId,
-                rollUsed: (ppfItem as any).rollUsed || 0
-              }] : []);
+              let ppfMaster = null;
 
-              if (rollsToDeduct.length > 0 && ppfId) {
-                const ppfMaster = await PPFMasterModel.findById(ppfId);
-                if (ppfMaster && ppfMaster.rolls) {
+              if (ppfId && mongoose.Types.ObjectId.isValid(ppfId)) {
+                ppfMaster = await PPFMasterModel.findById(ppfId);
+              }
+
+              if (!ppfMaster && ppfItem.name) {
+                const ppfName = ppfItem.name.split('(')[0].split('\n')[0].trim();
+                ppfMaster = await PPFMasterModel.findOne({
+                  name: { $regex: new RegExp(`^${ppfName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+                });
+              }
+
+              if (ppfMaster && ppfMaster.rolls) {
+                let deducted = false;
+                const rollsUsed = (ppfItem as any).rollsUsed;
+                const rollsToDeduct = (rollsUsed && rollsUsed.length > 0) ? rollsUsed : 
+                                     (ppfItem.rollId ? [{ rollId: ppfItem.rollId, rollUsed: (ppfItem as any).rollUsed || 0 }] : []);
+
+                if (rollsToDeduct.length > 0) {
                   for (const entry of rollsToDeduct) {
-                    const roll = (ppfMaster.rolls as any[]).find(r => 
-                      (r._id && r._id.toString() === entry.rollId) || r.id === entry.rollId
+                    const roll = (ppfMaster.rolls as any[]).find(r =>
+                      (r._id && r._id.toString() === entry.rollId) || r.id === entry.rollId || r.name === entry.rollId
                     );
                     if (roll && entry.rollUsed > 0) {
                       roll.stock -= entry.rollUsed;
+                      deducted = true;
                       console.log(`Deducted ${entry.rollUsed} sqft from roll ${roll.name} for JobCard update (New Invoice)`);
                     }
                   }
+                } else if (ppfItem.name) {
+                  // Fallback: Parse from name if no explicit roll data
+                  const rollMatches = Array.from((ppfItem.name || "").matchAll(/(?:Quantity:\s*)?([\d.]+)sqft\s*\(from\s*(.*?)\)/g));
+                  for (const match of rollMatches) {
+                    const typedMatch = match as RegExpMatchArray;
+                    const qty = parseFloat(typedMatch[1]);
+                    const rawRollName = typedMatch[2].split(/[,\s)]/)[0].trim();
+                    const roll = (ppfMaster.rolls as any[]).find(r =>
+                      r.name === rawRollName ||
+                      (r.name && r.name.toLowerCase().includes(rawRollName.toLowerCase())) ||
+                      (rawRollName.toLowerCase().includes(r.name.toLowerCase()))
+                    );
+                    if (roll && !isNaN(qty)) {
+                      roll.stock -= qty;
+                      deducted = true;
+                      console.log(`Deducted ${qty} sqft from roll ${roll.name} for JobCard update (Parsed from name)`);
+                    }
+                  }
+                }
+
+                if (deducted) {
                   ppfMaster.markModified("rolls");
                   await ppfMaster.save();
                 }
