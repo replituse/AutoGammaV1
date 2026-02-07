@@ -439,15 +439,32 @@ export default function AddJobPage() {
     const option = vehiclePricing?.options.find(o => o.warrantyName === selectedWarranty);
     
     if (p && selectedWarranty) {
+      console.log('=== Adding PPF Roll ===');
+      console.log('Selected PPF:', p);
+      console.log('Selected Warranty:', selectedWarranty);
+      console.log('Selected Roll:', roll);
+      console.log('Quantity Used:', rollQty);
+
       const currentPPFs = [...form.getValues("ppfs")];
+      console.log('Current PPF List in form:', currentPPFs);
+
       // Updated matching logic to be more robust during edits
       const existingPPFIndex = currentPPFs.findIndex(
         (field: any) => {
-          const fieldPpfId = field.ppfId || field.id;
-          return fieldPpfId === p.id && field.warranty === selectedWarranty;
+          const fieldPpfId = String(field.ppfId || field.id);
+          const match = fieldPpfId === String(p.id) && field.warranty === selectedWarranty;
+          console.log(`Checking match for field:`, {
+            fieldPpfId,
+            pId: p.id,
+            fieldWarranty: field.warranty,
+            selectedWarranty,
+            isMatch: match
+          });
+          return match;
         }
       );
 
+      console.log('Found existing match index:', existingPPFIndex);
       if (existingPPFIndex !== -1) {
         const existingField = currentPPFs[existingPPFIndex];
         
