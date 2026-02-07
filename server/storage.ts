@@ -895,15 +895,21 @@ export class MongoStorage implements IStorage {
       // Deduct new quantities
       for (const ppfItem of newPpfs) {
         const ppfId = (ppfItem as any).ppfId || ppfItem.id;
-        const rolls = (ppfItem as any).rollsUsed || (ppfItem.rollId ? [{
-          rollId: ppfItem.rollId,
-          rollUsed: (ppfItem as any).rollUsed || 0
-        }] : []);
+        const rolls = (ppfItem as any).rollsUsed || [];
+        
+        // If rollsUsed is missing but rollId/rollUsed exist, use them
+        if (rolls.length === 0 && (ppfItem as any).rollId) {
+          rolls.push({
+            rollId: (ppfItem as any).rollId,
+            rollUsed: (ppfItem as any).rollUsed || 0
+          });
+        }
 
         if (!adjustments.has(ppfId)) adjustments.set(ppfId, new Map());
         const ppfAdjustments = adjustments.get(ppfId)!;
 
         for (const entry of rolls) {
+          if (!entry.rollId) continue;
           const current = ppfAdjustments.get(entry.rollId) || 0;
           ppfAdjustments.set(entry.rollId, current + entry.rollUsed);
         }
@@ -912,15 +918,21 @@ export class MongoStorage implements IStorage {
       // Add back old quantities
       for (const ppfItem of oldPpfs) {
         const ppfId = (ppfItem as any).ppfId || ppfItem.id;
-        const rolls = (ppfItem as any).rollsUsed || (ppfItem.rollId ? [{
-          rollId: ppfItem.rollId,
-          rollUsed: (ppfItem as any).rollUsed || 0
-        }] : []);
+        const rolls = (ppfItem as any).rollsUsed || [];
+        
+        // If rollsUsed is missing but rollId/rollUsed exist, use them
+        if (rolls.length === 0 && (ppfItem as any).rollId) {
+          rolls.push({
+            rollId: (ppfItem as any).rollId,
+            rollUsed: (ppfItem as any).rollUsed || 0
+          });
+        }
 
         if (!adjustments.has(ppfId)) adjustments.set(ppfId, new Map());
         const ppfAdjustments = adjustments.get(ppfId)!;
 
         for (const entry of rolls) {
+          if (!entry.rollId) continue;
           const current = ppfAdjustments.get(entry.rollId) || 0;
           ppfAdjustments.set(entry.rollId, current - entry.rollUsed);
         }
