@@ -244,7 +244,7 @@ export default function JobDetailsPage() {
                           {service.name?.split(" - Tech:")[0] || service.name || "Unnamed Service"}
                         </TableCell>
                         <TableCell className="text-center text-sm text-slate-600">1</TableCell>
-                        <TableCell className="text-right pr-6 text-sm font-bold text-slate-900">₹{service.price.toLocaleString()}</TableCell>
+                        <TableCell className="text-right pr-6 text-sm font-bold text-slate-900">₹{(service.price || 0).toLocaleString()}</TableCell>
                       </TableRow>
                     ))}
                     {job.ppfs.map((ppf, idx) => (
@@ -261,7 +261,7 @@ export default function JobDetailsPage() {
                           </div>
                         </TableCell>
                         <TableCell className="text-center text-sm text-slate-600">1</TableCell>
-                        <TableCell className="text-right pr-6 text-sm font-bold text-slate-900">₹{ppf.price.toLocaleString()}</TableCell>
+                        <TableCell className="text-right pr-6 text-sm font-bold text-slate-900">₹{(ppf.price || 0).toLocaleString()}</TableCell>
                       </TableRow>
                     ))}
                     {job.accessories.map((accessory, idx) => (
@@ -271,7 +271,7 @@ export default function JobDetailsPage() {
                         </TableCell>
                         <TableCell className="text-sm font-semibold text-slate-800">{accessory.name}</TableCell>
                         <TableCell className="text-center text-sm text-slate-600">{accessory.quantity || 1}</TableCell>
-                        <TableCell className="text-right pr-6 text-sm font-bold text-slate-900">₹{accessory.price.toLocaleString()}</TableCell>
+                        <TableCell className="text-right pr-6 text-sm font-bold text-slate-900">₹{(accessory.price || 0).toLocaleString()}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -310,22 +310,22 @@ export default function JobDetailsPage() {
                       <>
                         <div className="flex justify-between items-center text-sm font-medium text-slate-500">
                           <span>Labor Charge</span>
-                          <span className="text-base font-bold text-slate-900">₹{job.laborCharge.toLocaleString()}</span>
+                          <span className="text-base font-bold text-slate-900">₹{(job.laborCharge || 0).toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm font-medium text-slate-500">
                           <span>Discount</span>
-                          <span className="text-base font-bold text-green-600">-₹{job.discount.toLocaleString()}</span>
+                          <span className="text-base font-bold text-green-600">-₹{(job.discount || 0).toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm font-medium text-slate-500">
-                          <span>GST ({job.gst}%)</span>
-                          <span className="text-base font-bold text-slate-900">₹{gstAmount.toLocaleString()}</span>
+                          <span>GST ({job.gst || 0}%)</span>
+                          <span className="text-base font-bold text-slate-900">₹{(gstAmount || 0).toLocaleString()}</span>
                         </div>
                       </>
                     );
                   })()}
                   <div className="flex justify-between items-center text-sm font-medium text-slate-500 pt-2 border-t border-slate-100">
                     <span>Estimated Cost</span>
-                    <span className="text-lg font-black text-slate-900">₹{job.estimatedCost.toLocaleString()}</span>
+                    <span className="text-lg font-black text-slate-900">₹{(job.estimatedCost || 0).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between items-center text-sm font-medium text-slate-500 pt-2 border-t border-slate-100">
                     <span>Assigned Technician</span>
