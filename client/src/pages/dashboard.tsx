@@ -31,6 +31,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
+import { Link } from "wouter";
 
 const COLORS = ['#3B82F6', '#F59E0B', '#10B981', '#EF4444'];
 
@@ -82,23 +83,27 @@ export default function DashboardPage() {
         {/* Tickets Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="border-none shadow-sm overflow-hidden">
-            <CardHeader className="bg-slate-50/50 border-b py-3 px-6 flex flex-row items-center gap-2">
-              <History className="h-4 w-4 text-red-600" />
-              <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-500">Tickets</CardTitle>
-            </CardHeader>
+            <Link href="/tickets">
+              <CardHeader className="bg-slate-50/50 border-b py-3 px-6 flex flex-row items-center gap-2 cursor-pointer hover:bg-slate-100 transition-colors">
+                <History className="h-4 w-4 text-red-600" />
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-500">Tickets</CardTitle>
+              </CardHeader>
+            </Link>
             <CardContent className="p-0">
               <div className="divide-y">
                 {data?.activeJobs && data.activeJobs.length > 0 ? (
                   data.activeJobs.map((job) => (
-                    <div key={job.id} className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between">
-                      <div>
-                        <p className="font-bold text-slate-900">{job.customerName}</p>
-                        <p className="text-sm text-slate-500">{job.vehicleInfo}</p>
+                    <Link key={job.id} href={`/tickets?id=${job.id}`}>
+                      <div className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer">
+                        <div>
+                          <p className="font-bold text-slate-900">{job.customerName}</p>
+                          <p className="text-sm text-slate-500">{job.vehicleInfo}</p>
+                        </div>
+                        <Badge variant="outline" className="bg-red-50 text-red-600 border-red-100 font-bold">
+                          {job.status}
+                        </Badge>
                       </div>
-                      <Badge variant="outline" className="bg-red-50 text-red-600 border-red-100 font-bold">
-                        {job.status}
-                      </Badge>
-                    </div>
+                    </Link>
                   ))
                 ) : (
                   <div className="p-8 text-center text-muted-foreground">
@@ -110,24 +115,28 @@ export default function DashboardPage() {
           </Card>
 
           <Card className="border-none shadow-sm overflow-hidden">
-            <CardHeader className="bg-slate-50/50 border-b py-3 px-6 flex flex-row items-center gap-2">
-              <Calendar className="h-4 w-4 text-blue-600" />
-              <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-500">Upcoming Appointments</CardTitle>
-            </CardHeader>
+            <Link href="/appointments">
+              <CardHeader className="bg-slate-50/50 border-b py-3 px-6 flex flex-row items-center gap-2 cursor-pointer hover:bg-slate-100 transition-colors">
+                <Calendar className="h-4 w-4 text-blue-600" />
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-500">Upcoming Appointments</CardTitle>
+              </CardHeader>
+            </Link>
             <CardContent className="p-0">
               <div className="divide-y">
                 {data?.upcomingAppointments && data.upcomingAppointments.length > 0 ? (
                   data.upcomingAppointments.map((appt) => (
-                    <div key={appt.id} className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between">
-                      <div>
-                        <p className="font-bold text-slate-900">{appt.customerName}</p>
-                        <p className="text-sm text-slate-500">{appt.vehicleInfo} • {appt.serviceType}</p>
-                        <p className="text-xs text-slate-400 font-medium mt-0.5">{appt.date} at {appt.time}</p>
+                    <Link key={appt.id} href="/appointments">
+                      <div className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer">
+                        <div>
+                          <p className="font-bold text-slate-900">{appt.customerName}</p>
+                          <p className="text-sm text-slate-500">{appt.vehicleInfo} • {appt.serviceType}</p>
+                          <p className="text-xs text-slate-400 font-medium mt-0.5">{appt.date} at {appt.time}</p>
+                        </div>
+                        <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-100 font-bold">
+                          Scheduled
+                        </Badge>
                       </div>
-                      <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-100 font-bold">
-                        Scheduled
-                      </Badge>
-                    </div>
+                    </Link>
                   ))
                 ) : (
                   <div className="p-8 text-center text-muted-foreground">
