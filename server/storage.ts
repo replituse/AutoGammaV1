@@ -883,7 +883,7 @@ export class MongoStorage implements IStorage {
             vehicleType: (j as any).vehicleType,
             rollUsed: (p as any).rollUsed,
             technician: (p as any).technician,
-            category: "PPF Application"
+            category: (p as any).ppfId || p.id // Use ppfId as category for stock replenishment
           });
         }
       });
@@ -992,11 +992,23 @@ export class MongoStorage implements IStorage {
     if (existingJob && existingJob.ppfs && existingJob.ppfs.length > 0) {
       for (const ppfItem of existingJob.ppfs) {
         const ppfId = (ppfItem as any).ppfId || ppfItem.id;
-        if ((ppfItem as any).rollUsed > 0 && ppfId) {
+        const rollsToRevert = (ppfItem as any).rollsUsed || (ppfItem.rollId ? [{
+          rollId: ppfItem.rollId,
+          rollUsed: (ppfItem as any).rollUsed
+        }] : []);
+
+        if (rollsToRevert.length > 0 && ppfId) {
           const ppfMaster = await PPFMasterModel.findById(ppfId);
-          if (ppfMaster && ppfMaster.rolls && ppfMaster.rolls.length > 0) {
-            const firstRoll = ppfMaster.rolls[0] as any;
-            firstRoll.stock += (ppfItem as any).rollUsed;
+          if (ppfMaster && ppfMaster.rolls) {
+            for (const entry of rollsToRevert) {
+              const roll = (ppfMaster.rolls as any[]).find(r => 
+                (r._id && r._id.toString() === entry.rollId) || r.id === entry.rollId
+              );
+              if (roll && entry.rollUsed > 0) {
+                roll.stock += entry.rollUsed;
+                console.log(`Replenished ${entry.rollUsed} sqft to roll ${roll.name} during JobCard deletion`);
+              }
+            }
             ppfMaster.markModified("rolls");
             await ppfMaster.save();
           }
@@ -1341,35 +1353,87 @@ export class MongoStorage implements IStorage {
     // Replenish PPF stock if there are PPF items
     if (invoice.items && invoice.items.length > 0) {
       for (const item of invoice.items) {
-        if (item.type === "PPF" && item.category && item.rollUsed && item.rollUsed > 0) {
-          const ppfMaster = await PPFMasterModel.findById(item.category);
-          if (ppfMaster && ppfMaster.rolls) {
-            // Since Invoice items don't store rollId, we look for the roll used in the JobCard
-            // or match by technician/name if available.
-            // According to the enrichment logic in getInvoices, we can try to find the job card.
-            const jobCard = await JobCardModel.findById(invoice.jobCardId);
-            let rollToReplenish = null;
+        if (item.type === "PPF" && item.rollUsed && item.rollUsed > 0 && item.name) {
+          // 1. Identify the PPF Master
+          let ppfMaster = null;
+          
+          // Try by category ID first (newly created invoices)
+          if (item.category && mongoose.Types.ObjectId.isValid(item.category)) {
+            ppfMaster = await PPFMasterModel.findById(item.category);
+          }
+          
+          // Fallback: Try by name from description (handles legacy invoices)
+          if (!ppfMaster) {
+            const ppfName = item.name.split('(')[0].trim(); // Extract name before details
+            ppfMaster = await PPFMasterModel.findOne({ name: { $regex: new RegExp(`^${ppfName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i') } });
+          }
 
+          if (ppfMaster && ppfMaster.rolls) {
+            // 2. Identify the Roll(s)
+            const jobCard = await JobCardModel.findById(invoice.jobCardId);
+            let replenished = false;
+
+            // Strategy A: Use roll information from JobCard (most accurate)
             if (jobCard && jobCard.ppfs) {
-              const matchingPpf = (jobCard.ppfs as any[]).find(p => p.name === item.name);
-              if (matchingPpf && matchingPpf.rollId) {
-                rollToReplenish = (ppfMaster.rolls as any[]).find(r => 
-                  (r._id && r._id.toString() === matchingPpf.rollId) || r.id === matchingPpf.rollId
+              const matchingPpfInJob = (jobCard.ppfs as any[]).find(p => p.name === item.name || (item.name && item.name.includes(p.name)));
+              if (matchingPpfInJob && matchingPpfInJob.rollId) {
+                const roll = (ppfMaster.rolls as any[]).find(r => 
+                  (r._id && r._id.toString() === matchingPpfInJob.rollId) || r.id === matchingPpfInJob.rollId
                 );
+                if (roll) {
+                  roll.stock += item.rollUsed;
+                  replenished = true;
+                  console.log(`Replenished ${item.rollUsed} sqft to roll ${roll.name} via JobCard mapping`);
+                }
               }
             }
 
-            // Fallback: if we still haven't found the roll, look for one that might match description
-            if (!rollToReplenish) {
-               // Try to match by name or just use the first roll if it's a simple setup
-               rollToReplenish = ppfMaster.rolls[0]; 
+            // Strategy B: Parse roll name from multi-line description (common in legacy invoices)
+            // Example: "Quantity: 400sqft (from Roll2) , Quantity: 120sqft (from Roll1)"
+            if (!replenished && item.name && item.name.includes("(from ")) {
+              const rollMatches = Array.from(item.name.matchAll(/Quantity:\s*([\d.]+)sqft\s*\(from\s*(.*?)\)/g));
+              let foundInDescription = false;
+              for (const match of rollMatches) {
+                const qtyStr = match[1];
+                const rollName = match[2].trim();
+                const qty = parseFloat(qtyStr);
+                const roll = (ppfMaster.rolls as any[]).find(r => r.name === rollName);
+                if (roll && !isNaN(qty)) {
+                  roll.stock += qty;
+                  foundInDescription = true;
+                  console.log(`Replenished ${qty} sqft to roll ${rollName} parsed from description`);
+                }
+              }
+              if (foundInDescription) replenished = true;
             }
 
-            if (rollToReplenish) {
-              rollToReplenish.stock += item.rollUsed;
+            // Strategy C: Single roll fallback if only one roll was used
+            if (!replenished && item.name && item.name.includes("(from ")) {
+               const rollMatch = item.name.match(/\(from (.*?)\)/);
+               if (rollMatch && rollMatch[1]) {
+                 const rollName = rollMatch[1].trim();
+                 const roll = (ppfMaster.rolls as any[]).find(r => r.name === rollName);
+                 if (roll) {
+                   roll.stock += item.rollUsed;
+                   replenished = true;
+                   console.log(`Replenished ${item.rollUsed} sqft to roll ${rollName} (single match fallback)`);
+                 }
+               }
+            }
+
+            // Final Strategy: use the first roll if nothing else worked
+            if (!replenished && ppfMaster.rolls.length > 0) {
+               const firstRoll = ppfMaster.rolls[0] as any;
+               if (firstRoll) {
+                 firstRoll.stock += item.rollUsed;
+                 replenished = true;
+                 console.log(`Replenished ${item.rollUsed} sqft to first roll ${firstRoll.name} (final fallback)`);
+               }
+            }
+
+            if (replenished) {
               ppfMaster.markModified("rolls");
               await ppfMaster.save();
-              console.log(`Replenished ${item.rollUsed} sqft to roll ${rollToReplenish.name} for PPF ${ppfMaster.name}`);
             }
           }
         }
