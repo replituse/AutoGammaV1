@@ -1251,33 +1251,6 @@ export class MongoStorage implements IStorage {
   }
 
   async deleteJobCard(id: string): Promise<boolean> {
-    const existingJob = await JobCardModel.findById(id);
-    if (existingJob && existingJob.ppfs && existingJob.ppfs.length > 0) {
-      for (const ppfItem of existingJob.ppfs) {
-        const ppfId = (ppfItem as any).ppfId || ppfItem.id;
-        const rollsToRevert = (ppfItem as any).rollsUsed || (ppfItem.rollId ? [{
-          rollId: ppfItem.rollId,
-          rollUsed: (ppfItem as any).rollUsed
-        }] : []);
-
-        if (rollsToRevert.length > 0 && ppfId) {
-          const ppfMaster = await PPFMasterModel.findById(ppfId);
-          if (ppfMaster && ppfMaster.rolls) {
-            for (const entry of rollsToRevert) {
-              const roll = (ppfMaster.rolls as any[]).find(r => 
-                (r._id && r._id.toString() === entry.rollId) || r.id === entry.rollId
-              );
-              if (roll && entry.rollUsed > 0) {
-                roll.stock += entry.rollUsed;
-                console.log(`Replenished ${entry.rollUsed} sqft to roll ${roll.name} during JobCard deletion`);
-              }
-            }
-            ppfMaster.markModified("rolls");
-            await ppfMaster.save();
-          }
-        }
-      }
-    }
     const result = await JobCardModel.findByIdAndDelete(id);
     return !!result;
   }
