@@ -1367,8 +1367,9 @@ export class MongoStorage implements IStorage {
           
           // Fallback: Try by name from description (handles legacy invoices)
           if (!ppfMaster && item.name) {
-            const ppfName = item.name.split('(')[0].trim(); // Extract name before details
-            ppfMaster = await PPFMasterModel.findOne({ name: { $regex: new RegExp(`^${ppfName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i') } });
+            const ppfName = item.name.split('(')[0].split('\n')[0].trim(); // Extract name before details/newline
+            console.log(`[REPLENISH] Searching for PPF Master by name: "${ppfName}"`);
+            ppfMaster = await PPFMasterModel.findOne({ name: { $regex: new RegExp(`^${ppfName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
           }
 
           if (ppfMaster && ppfMaster.rolls) {
@@ -1395,20 +1396,30 @@ export class MongoStorage implements IStorage {
             // Strategy B: Parse roll name from description (multi-roll support)
             if (!replenished && item.name && (item.name.includes("(from ") || item.name.includes("Quantity:"))) {
               console.log(`[REPLENISH] Attempting Strategy B for description: ${item.name}`);
-              // Regex for "Quantity: 400sqft (from Roll2)"
-              const rollMatches = Array.from(item.name.matchAll(/Quantity:\s*([\d.]+)sqft\s*\(from\s*(.*?)\)/g));
+              // Match multiple patterns: "Quantity: 400sqft (from Roll2)" or "400sqft (from Roll2)"
+              const rollMatches = Array.from(item.name.matchAll(/(?:Quantity:\s*)?([\d.]+)sqft\s*\(from\s*(.*?)\)/g));
               
               if (rollMatches.length > 0) {
                 let foundInDescription = false;
                 for (const match of rollMatches) {
                   const qtyStr = match[1];
-                  const rollName = match[2].trim();
+                  const rawRollName = match[2].split(/[,\s)]/)[0].trim(); // Get roll name, stop at comma, space or closing paren
                   const qty = parseFloat(qtyStr);
-                  const roll = (ppfMaster.rolls as any[]).find(r => r.name === rollName);
+                  console.log(`[REPLENISH] Strategy B match: rawRollName="${rawRollName}", qty=${qty}`);
+                  
+                  // Match roll name exactly or as a substring (to handle Roll1 vs Roll1-Legacy)
+                  const roll = (ppfMaster.rolls as any[]).find(r => 
+                    r.name === rawRollName || 
+                    (r.name && r.name.toLowerCase().includes(rawRollName.toLowerCase())) ||
+                    (rawRollName.toLowerCase().includes(r.name.toLowerCase()))
+                  );
+
                   if (roll && !isNaN(qty)) {
                     roll.stock += qty;
                     foundInDescription = true;
-                    console.log(`[REPLENISH] Replenished ${qty} sqft to roll ${rollName} parsed from description`);
+                    console.log(`[REPLENISH] Replenished ${qty} sqft to roll ${roll.name} (matched from "${rawRollName}") parsed from description`);
+                  } else {
+                    console.warn(`[REPLENISH] Strategy B: Roll matching "${rawRollName}" not found in PPF Master "${ppfMaster.name}". Available rolls: ${ppfMaster.rolls.map((r: any) => r.name).join(", ")}`);
                   }
                 }
                 if (foundInDescription) replenished = true;
