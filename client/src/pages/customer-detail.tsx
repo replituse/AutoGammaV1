@@ -312,12 +312,13 @@ export default function CustomerDetailPage() {
                         <div className="flex justify-between items-center">
                           <div>
                             <p className="text-sm font-semibold">
-                              {inq.services.length} Services, {inq.accessories.length} Accessories
+                              {inq.inquiryId}
                             </p>
-                            <p className="text-xs text-slate-500 mt-1">
-                              {inq.services.slice(0, 2).map(s => s.serviceName).join(", ")}
-                              {inq.services.length > 2 ? "..." : ""}
-                            </p>
+                            {inq.notes && (
+                              <p className="text-xs text-slate-500 mt-1 italic">
+                                "{inq.notes}"
+                              </p>
+                            )}
                           </div>
                           <div className="text-right">
                             <p className="font-bold text-sm">₹{inq.customerPrice}</p>
