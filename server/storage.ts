@@ -927,11 +927,15 @@ export class MongoStorage implements IStorage {
       }
 
       // 2. Apply adjustments (delta = new - old)
-      for (const [ppfId, ppfAdjustments] of adjustments) {
+      for (const entry of Array.from(adjustments.entries())) {
+        const ppfId = entry[0];
+        const ppfAdjustments = entry[1];
         const ppfMaster = await PPFMasterModel.findById(ppfId);
         if (ppfMaster && ppfMaster.rolls) {
           let modified = false;
-          for (const [rollId, delta] of ppfAdjustments) {
+          for (const adjEntry of Array.from(ppfAdjustments.entries())) {
+            const rollId = adjEntry[0];
+            const delta = adjEntry[1];
             if (delta === 0) continue;
             const roll = (ppfMaster.rolls as any[]).find(r => 
               (r._id && r._id.toString() === rollId) || r.id === rollId
