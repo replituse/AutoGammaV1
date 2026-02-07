@@ -50,15 +50,30 @@ const BUSINESS_INFO = {
 };
 
 function InvoiceItemDetails({ item }: { item: InvoiceItem }) {
-  const hasSubDetails = (item.type === "PPF" && (item.warranty || item.rollUsed)) || 
+  const isPPF = item.type === "PPF";
+  const hasSubDetails = (isPPF && (item.warranty || item.rollUsed || (item.name.includes('(') && item.name.includes(')')))) || 
                         (item.type === "Accessory" && (item.category || (item.quantity && item.quantity > 1)));
+
+  let displayName = item.name;
+  let subText = "";
+
+  if (isPPF) {
+    const match = item.name.match(/^(.*?)\s*\((.*?)\)$/);
+    if (match) {
+      displayName = match[1];
+      subText = match[2];
+    }
+  }
   
   return (
     <div className="space-y-1">
-      <div className="font-semibold text-slate-900">{item.name}</div>
-      {hasSubDetails && (
+      <div className="font-bold text-slate-900">{displayName}</div>
+      {(hasSubDetails || subText) && (
         <div className="text-xs text-slate-500 space-y-0.5 pl-2 border-l-2 border-slate-200">
-          {item.type === "PPF" && (
+          {subText && (
+            <div className="text-slate-600 font-medium">{subText}</div>
+          )}
+          {isPPF && (
             <>
               {item.warranty && (
                 <div><span className="font-medium text-slate-700">Warranty:</span> {item.warranty}</div>
