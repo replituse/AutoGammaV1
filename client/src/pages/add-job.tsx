@@ -1358,51 +1358,26 @@ export default function AddJobPage() {
                     </Button>
                   </div>
                 </div>
-                {accessoryFields.length > 0 && (
-                  <div className="border rounded-md overflow-hidden">
-                    <div className="bg-slate-50 p-3 text-xs font-bold uppercase text-slate-500 border-b">Selected Accessories</div>
-                    <div className="divide-y">
-                      {accessoryFields.map((field, index) => (
-                        <div key={field.id} className="flex items-center justify-between p-3">
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium">{(field as any).name}</span>
-                            <span className="text-xs text-muted-foreground">Quantity: {(field as any).quantity || 1} | Price: ₹{((field as any).price * ((field as any).quantity || 1)).toLocaleString()}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              type="button"
-                              onClick={() => {
-                                const current = form.getValues(`accessories.${index}.quantity`) || 1;
-                                form.setValue(`accessories.${index}.quantity`, Math.max(1, current - 1));
-                              }}
-                              className="h-8 w-8 text-slate-400"
-                            >
-                              -
-                            </Button>
-                            <span className="text-sm font-medium">{(field as any).quantity || 1}</span>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              type="button"
-                              onClick={() => {
-                                const current = form.getValues(`accessories.${index}.quantity`) || 1;
-                                form.setValue(`accessories.${index}.quantity`, current + 1);
-                              }}
-                              className="h-8 w-8 text-slate-400"
-                            >
-                              +
-                            </Button>
-                            <Button variant="ghost" size="icon" type="button" onClick={() => removeAccessory(index)} className="h-8 w-8 text-slate-400 hover:text-red-600">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
+            {accessoryFields.length > 0 && (
+              <div className="border rounded-md overflow-hidden">
+                <div className="bg-slate-50 p-3 text-xs font-bold uppercase text-slate-500 border-b">Selected Accessories</div>
+                <div className="divide-y">
+                  {accessoryFields.map((field, index) => (
+                    <div key={field.id} className="flex items-center justify-between p-3">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">{(field as any).name}</span>
+                        <span className="text-xs text-muted-foreground">Quantity: {(field as any).quantity || 1}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="icon" type="button" onClick={() => removeAccessory(index)} className="h-8 w-8 text-slate-400 hover:text-red-600">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  ))}
+                </div>
+              </div>
+            )}
               </CardContent>
               )}
             </Card>

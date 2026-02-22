@@ -863,6 +863,15 @@ export class MongoStorage implements IStorage {
       }
     }
 
+    // Deduct accessory stock
+    if (jobCard.accessories) {
+      for (const acc of jobCard.accessories) {
+        await AccessoryMasterModel.findByIdAndUpdate(acc.id, {
+          $inc: { quantity: -(acc.quantity || 1) }
+        });
+      }
+    }
+
     // Deduct PPF roll inventory
     if (jobCard.ppfs && jobCard.ppfs.length > 0) {
       // Check if an invoice exists for each business
@@ -1031,6 +1040,18 @@ export class MongoStorage implements IStorage {
             ppfMaster.markModified("rolls");
             await ppfMaster.save();
           }
+        }
+      }
+    }
+
+    // Handle accessory stock deduction for new accessories added during update
+    if (jobCard.accessories && existingJob) {
+      const existingAccIds = (existingJob as any).accessories?.map((a: any) => a.id || a.accessoryId) || [];
+      for (const acc of jobCard.accessories) {
+        if (!existingAccIds.includes(acc.id)) {
+          await AccessoryMasterModel.findByIdAndUpdate(acc.id, {
+            $inc: { quantity: -(acc.quantity || 1) }
+          });
         }
       }
     }
