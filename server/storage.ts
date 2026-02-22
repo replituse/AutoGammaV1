@@ -866,12 +866,15 @@ export class MongoStorage implements IStorage {
     // Deduct accessory stock
     if (jobCard.accessories) {
       for (const acc of jobCard.accessories) {
-        const accessory = await AccessoryMasterModel.findById(acc.accessoryId || acc.id);
+        const accId = (acc as any).accessoryId || (acc as any).id;
+        if (!accId || accId === "undefined") continue;
+        const accessory = await AccessoryMasterModel.findById(accId);
         if (accessory) {
           const qtyToDeduct = Number(acc.quantity || 1);
-          const newQty = Math.max(0, (accessory.quantity || 0) - qtyToDeduct);
+          const currentStock = Number(accessory.quantity || 0);
+          const newQty = Math.max(0, currentStock - qtyToDeduct);
           await AccessoryMasterModel.findByIdAndUpdate(accessory._id, { quantity: newQty });
-          console.log(`[STORAGE CREATE JOBCARD] Deducted ${qtyToDeduct} from ${accessory.name}. New stock: ${newQty}`);
+          console.log(`[STORAGE CREATE JOBCARD] Deducted ${qtyToDeduct} from ${accessory.name}. Old stock: ${currentStock}, New stock: ${newQty}`);
         }
       }
     }
@@ -932,18 +935,18 @@ export class MongoStorage implements IStorage {
       // Map of accessoryId -> quantity
       const oldMap = new Map<string, number>();
       oldAccessories.forEach(a => {
-        const accId = a.accessoryId || a.id;
-        if (accId) oldMap.set(accId, (oldMap.get(accId) || 0) + (a.quantity || 1));
+        const accId = String((a as any).accessoryId || (a as any).id || (a as any)._id);
+        if (accId && accId !== "undefined") oldMap.set(accId, (oldMap.get(accId) || 0) + (Number(a.quantity) || 1));
       });
 
       const newMap = new Map<string, number>();
       newAccessories.forEach(a => {
-        const accId = a.accessoryId || a.id;
-        if (accId) newMap.set(accId, (newMap.get(accId) || 0) + (a.quantity || 1));
+        const accId = String((a as any).accessoryId || (a as any).id || (a as any)._id);
+        if (accId && accId !== "undefined") newMap.set(accId, (newMap.get(accId) || 0) + (Number(a.quantity) || 1));
       });
 
       // Calculate diff and update stock
-      const allIds = new Set([...oldMap.keys(), ...newMap.keys()]);
+      const allIds = Array.from(new Set([...Array.from(oldMap.keys()), ...Array.from(newMap.keys())]));
       for (const accId of allIds) {
         const oldQty = oldMap.get(accId) || 0;
         const newQty = newMap.get(accId) || 0;
@@ -952,8 +955,10 @@ export class MongoStorage implements IStorage {
         if (diff !== 0) {
           const accessory = await AccessoryMasterModel.findById(accId);
           if (accessory) {
-            accessory.quantity -= diff;
-            await accessory.save();
+            const currentStock = accessory.quantity || 0;
+            const updatedStock = Math.max(0, currentStock - diff);
+            await AccessoryMasterModel.findByIdAndUpdate(accessory._id, { quantity: updatedStock });
+            console.log(`[STORAGE UPDATE JOBCARD] Accessory ${accessory.name} stock adjusted by ${-diff}. Old: ${currentStock}, New: ${updatedStock}`);
           }
         }
       }

@@ -571,17 +571,19 @@ export default function AddJobPage() {
     }
   };
 
-  const { toast } = useToast();
-
   const createJobMutation = useMutation({
-    mutationFn: async (values: JobCardFormValues) => {
-      console.log("Mutation starting - Payload:", values);
-      const res = await apiRequest(jobId ? "PATCH" : "POST", jobId ? `/api/job-cards/${jobId}` : "/api/job-cards", values);
+    mutationFn: async (payload: any) => {
+      console.log("Mutation starting - Payload:", payload);
+      const method = jobId ? "PATCH" : "POST";
+      const url = jobId ? `/api/job-cards/${jobId}` : "/api/job-cards";
+      const res = await apiRequest(method, url, payload);
       return await res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/job-cards"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/job-cards", jobId] });
       queryClient.invalidateQueries({ queryKey: [api.masters.accessories.list.path] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
       toast({
         title: jobId ? "Job Card Updated" : "Job Card Created",
         description: `Successfully ${jobId ? "updated" : "created"} the job card.`,
@@ -596,116 +598,47 @@ export default function AddJobPage() {
       });
     }
   });
-          business: s.business || "Auto Gamma"
-        })),
-        ppfs: values.ppfs.map(p => ({
-          id: p.ppfId || p.id,
-          ppfId: p.ppfId || p.id,
-          name: p.name,
-          price: p.price,
-          technician: p.technician,
-          rollId: p.rollId,
-          rollUsed: p.rollUsed,
-          rollsUsed: p.rollsUsed,
-          warranty: p.warranty,
-          business: p.business || "Auto Gamma"
-        })),
-        accessories: values.accessories.map(a => ({
-          id: a.accessoryId || a.id,
-          accessoryId: a.accessoryId || a.id,
-          name: a.name,
-          price: a.price,
-          quantity: a.quantity,
-          business: a.business || "Auto Gamma"
-        })),
-        laborCharge: values.laborCharge,
-        discount: values.discount,
-        gst: values.gst,
-        serviceNotes: values.serviceNotes,
-        estimatedCost,
-        status: jobToEdit?.status || "Pending",
-        technician,
-        isPaid: (values as any).isPaid,
-        payments: (values as any).payments
-      };
+
+  const onSubmit = async (data: JobCardFormValues) => {
+    try {
+      console.log("Form submitted with data:", data);
       
-      const method = jobId ? "PATCH" : "POST";
-      const url = jobId ? `/api/job-cards/${jobId}` : "/api/job-cards";
-      console.log(`Sending ${method} request to ${url}`);
-      const res = await apiRequest(method, url, payload);
-      const result = await res.json();
-      console.log("API Response:", result);
-      return result;
-    },
-    onSuccess: (data) => {
-      console.log("Mutation successful", data);
-      queryClient.invalidateQueries({ queryKey: ["/api/job-cards"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/job-cards", jobId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
-      queryClient.invalidateQueries({ queryKey: [api.masters.ppf.list.path] });
+      const subtotal = [...data.services, ...data.ppfs, ...data.accessories].reduce((acc, curr) => acc + (curr.price * (curr.quantity || 1)), 0) + Number(data.laborCharge || 0);
+      const afterDiscount = subtotal - Number(data.discount || 0);
+      const tax = afterDiscount * (Number(data.gst || 18) / 100);
+      const totalEstimatedCost = Math.round(afterDiscount + tax);
+      
+      const payload = {
+        ...data,
+        estimatedCost: totalEstimatedCost,
+        status: jobToEdit?.status || "Pending",
+        accessories: data.accessories.map(a => ({
+          ...a,
+          quantity: Number(a.quantity || 1),
+          accessoryId: a.accessoryId || a.id
+        }))
+      };
+
+      if (!showBusinessDialog) {
+        setPendingFormData(payload);
+        const assignments: Record<string, string> = {};
+        data.services.forEach((_, i) => assignments[`service-${i}`] = "Auto Gamma");
+        data.ppfs.forEach((_, i) => assignments[`ppf-${i}`] = "Auto Gamma");
+        data.accessories.forEach((_, i) => assignments[`accessory-${i}`] = "Auto Gamma");
+        setBusinessAssignments(assignments);
+        setShowBusinessDialog(true);
+      } else {
+        await createJobMutation.mutateAsync(payload);
+      }
+    } catch (error) {
+      console.error("Error in onSubmit:", error);
       toast({
-        title: "Success",
-        description: `Job card ${jobId ? "updated" : "created"} successfully`,
-      });
-      setLocation("/invoice");
-    },
-    onError: (error: any) => {
-      console.error("Mutation error", error);
-      toast({
-        title: "Error",
-        description: error.message || `Failed to ${jobId ? "update" : "create"} job card`,
+        title: "Submission Error",
+        description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
     }
-  });
-
-  const onSubmit = async (data: JobCardFormValues) => {
-    console.log("Form submitted - Values:", data);
-    
-    try {
-      console.log("Starting manual validation...");
-      const isValid = await form.trigger();
-      console.log("Manual validation result:", isValid);
-      
-      if (!isValid) {
-        const errors = form.formState.errors;
-        console.warn("Validation failed with errors:", errors);
-        
-        // Detailed error logging
-        Object.entries(errors).forEach(([field, error]: [any, any]) => {
-          console.error(`Field "${field}" has error:`, error.message || error.type || error);
-          if (error.root) {
-             console.error(`Root error for ${field}:`, error.root);
-          }
-        });
-        
-        // Find first error and scroll to it
-        const firstErrorField = Object.keys(errors)[0];
-        if (firstErrorField) {
-          const errorElement = document.querySelector(`[name="${firstErrorField}"]`) || 
-                               document.querySelector(`[id*="${firstErrorField}"]`);
-          if (errorElement) {
-            errorElement.scrollIntoView({ behavior: "smooth", block: "center" });
-          }
-        }
-
-        toast({
-          title: "Validation Error",
-          description: "Please check the required fields highlighted in red.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      console.log("Form is valid, opening business assignment dialog...");
-      setPendingFormData(data);
-      
-      // Initialize assignments for all items
-      const initialAssignments: Record<string, "Auto Gamma" | "AGNX"> = {};
-      data.services.forEach((_, i) => initialAssignments[`service-${i}`] = "Auto Gamma");
-      data.ppfs.forEach((_, i) => initialAssignments[`ppf-${i}`] = "Auto Gamma");
-      data.accessories.forEach((_, i) => initialAssignments[`accessory-${i}`] = "Auto Gamma");
-      
+  };
       setBusinessAssignments(initialAssignments);
       setLaborBusiness("Auto Gamma");
       setShowBusinessDialog(true);
@@ -745,16 +678,21 @@ export default function AddJobPage() {
     setShowBusinessDialog(false);
   };
 
-  const currentPPF = ppfMasters.find(p => p.id === selectedPPF);
-  const selectedRoll = currentPPF?.rolls?.find((r: any) => r._id === selectedPPFRoll || r.id === selectedPPFRoll);
-  
-  // Calculate total used in current job for ALL rolls of this PPF type, 
-  // but we specifically need it for the selected roll to calculate its real-time stock
-  const usedInCurrentJobForSelectedRoll = form.watch("ppfs")
-    .filter((p: any) => p.rollId === selectedPPFRoll)
-    .reduce((sum: number, p: any) => sum + (p.rollUsed || 0), 0);
-
-  const realTimeStock = selectedRoll ? selectedRoll.stock - usedInCurrentJobForSelectedRoll : 0;
+  const realTimeStock = (() => {
+    if (!selectedPPF || !selectedPPFRoll) return 0;
+    const p = ppfMasters.find(item => item.id === selectedPPF);
+    const roll = p?.rolls?.find((r: any) => (r._id?.toString() === selectedPPFRoll) || (r.id?.toString() === selectedPPFRoll));
+    if (!roll) return 0;
+    
+    const usedInCurrentJob = (form.watch("ppfs") || []).reduce((acc: number, field: any) => {
+      if (field.rollId === selectedPPFRoll) {
+        return acc + (Number(field.rollUsed) || 0);
+      }
+      return acc;
+    }, 0);
+    
+    return (Number(roll.stock) || 0) - usedInCurrentJob;
+  })();
   const { data: vehicleTypes = [] } = useQuery<any[]>({
     queryKey: [api.masters.vehicleTypes.list.path],
   });
