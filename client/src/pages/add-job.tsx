@@ -76,6 +76,7 @@ import {
 } from "@/components/ui/dialog";
 
 export default function AddJobPage() {
+  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const searchParams = new URLSearchParams(useSearch());
   const jobId = searchParams.get("id");
@@ -336,6 +337,7 @@ export default function AddJobPage() {
   const [selectedServiceVehicleType, setSelectedServiceVehicleType] = useState("");
   const [selectedTechnician, setSelectedTechnician] = useState("");
   const [selectedPPF, setSelectedPPF] = useState("");
+  const currentPPF = ppfMasters.find(p => p.id === selectedPPF);
   const [selectedPPFRoll, setSelectedPPFRoll] = useState("");
   const [selectedPPFVehicleType, setSelectedPPFVehicleType] = useState("");
   const [selectedWarranty, setSelectedWarranty] = useState("");
