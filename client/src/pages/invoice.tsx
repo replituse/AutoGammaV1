@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select";
 import autoGammaLogo from "@assets/image_1769446487293.png";
 
-const BUSINESS_INFO = {
+const BUSINESS_INFO: Record<string, { name: string; address: string; phone: string; email: string; website: string; logo: string | null }> = {
   "Auto Gamma": {
     name: "Auto Gamma",
     address: "Shop no. 09 & 10, Shreeji Parasio, Prasad Hotel Road, near Panvel Highway, beside Tulsi Aangan Soc, Katrap, Badlapur, Maharashtra 421503",
