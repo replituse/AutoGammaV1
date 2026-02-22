@@ -757,14 +757,15 @@ export class MongoStorage implements IStorage {
     await j.save();
 
     // Deduct Accessory stock
-    if (jobCard.accessories && jobCard.accessories.length > 0) {
-      for (const item of jobCard.accessories) {
-        const accessoryId = (item as any).accessoryId || (item as any).id;
-        if (accessoryId) {
-          const accessory = await AccessoryMasterModel.findById(accessoryId);
+    if (j.accessories && j.accessories.length > 0) {
+      for (const item of (j.accessories as any[])) {
+        const accId = item.accessoryId || item.id || item._id;
+        if (accId) {
+          const accessory = await AccessoryMasterModel.findById(accId);
           if (accessory) {
             const qtyToDeduct = item.quantity || 1;
             accessory.quantity -= qtyToDeduct;
+            console.log(`[CREATE JOB CARD] Deducting ${qtyToDeduct} from ${accessory.name}. New stock: ${accessory.quantity}`);
             await accessory.save();
           }
         }
@@ -909,6 +910,41 @@ export class MongoStorage implements IStorage {
   async updateJobCard(id: string, jobCard: Partial<JobCard>): Promise<JobCard | undefined> {
     const existingJob = await JobCardModel.findById(id);
     if (!existingJob) return undefined;
+
+    // Handle Accessory stock adjustments if accessories are being updated
+    if (jobCard.accessories) {
+      const oldAccessories = (existingJob.accessories || []) as any[];
+      const newAccessories = jobCard.accessories as any[];
+
+      // Map of accessoryId -> quantity
+      const oldMap = new Map<string, number>();
+      oldAccessories.forEach(a => {
+        const accId = a.accessoryId || a.id;
+        if (accId) oldMap.set(accId, (oldMap.get(accId) || 0) + (a.quantity || 1));
+      });
+
+      const newMap = new Map<string, number>();
+      newAccessories.forEach(a => {
+        const accId = a.accessoryId || a.id;
+        if (accId) newMap.set(accId, (newMap.get(accId) || 0) + (a.quantity || 1));
+      });
+
+      // Calculate diff and update stock
+      const allIds = new Set([...oldMap.keys(), ...newMap.keys()]);
+      for (const accId of allIds) {
+        const oldQty = oldMap.get(accId) || 0;
+        const newQty = newMap.get(accId) || 0;
+        const diff = newQty - oldQty;
+
+        if (diff !== 0) {
+          const accessory = await AccessoryMasterModel.findById(accId);
+          if (accessory) {
+            accessory.quantity -= diff;
+            await accessory.save();
+          }
+        }
+      }
+    }
 
     // Handle PPF stock adjustments if ppfs are being updated
     if (jobCard.ppfs) {
