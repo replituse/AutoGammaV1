@@ -639,13 +639,6 @@ export default function AddJobPage() {
       });
     }
   };
-      setBusinessAssignments(initialAssignments);
-      setLaborBusiness("Auto Gamma");
-      setShowBusinessDialog(true);
-    } catch (err) {
-      console.error("Submit handler error:", err);
-    }
-  };
 
   const handleCompleteWithBusiness = () => {
     if (!pendingFormData) return;
