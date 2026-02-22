@@ -576,32 +576,26 @@ export default function AddJobPage() {
   const createJobMutation = useMutation({
     mutationFn: async (values: JobCardFormValues) => {
       console.log("Mutation starting - Payload:", values);
-      const subtotal = [...values.services, ...values.ppfs, ...values.accessories].reduce((acc, curr) => acc + (curr.price * (curr.quantity || 1)), 0) + values.laborCharge;
-      const afterDiscount = subtotal - values.discount;
-      const tax = afterDiscount * (values.gst / 100);
-      const estimatedCost = Math.round(afterDiscount + tax);
-
-      // Extract technician from first service if available
-      const technician = values.services[0]?.technician;
-
-      const payload = {
-        customerName: values.customerName,
-        phoneNumber: values.phoneNumber,
-        emailAddress: values.emailAddress,
-        referralSource: values.referralSource,
-        referrerName: values.referrerName,
-        referrerPhone: values.referrerPhone,
-        make: values.make,
-        model: values.model,
-        year: values.year,
-        licensePlate: values.licensePlate,
-        vehicleType: values.vehicleType,
-        services: values.services.map(s => ({
-          id: s.serviceId || s.id,
-          serviceId: s.serviceId || s.id,
-          name: s.name,
-          price: s.price,
-          technician: s.technician,
+      const res = await apiRequest(jobId ? "PATCH" : "POST", jobId ? `/api/job-cards/${jobId}` : "/api/job-cards", values);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/job-cards"] });
+      queryClient.invalidateQueries({ queryKey: [api.masters.accessories.list.path] });
+      toast({
+        title: jobId ? "Job Card Updated" : "Job Card Created",
+        description: `Successfully ${jobId ? "updated" : "created"} the job card.`,
+      });
+      setLocation("/job-cards");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
           business: s.business || "Auto Gamma"
         })),
         ppfs: values.ppfs.map(p => ({

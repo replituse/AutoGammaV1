@@ -866,9 +866,13 @@ export class MongoStorage implements IStorage {
     // Deduct accessory stock
     if (jobCard.accessories) {
       for (const acc of jobCard.accessories) {
-        await AccessoryMasterModel.findByIdAndUpdate(acc.id, {
-          $inc: { quantity: -(acc.quantity || 1) }
-        });
+        const accessory = await AccessoryMasterModel.findById(acc.accessoryId || acc.id);
+        if (accessory) {
+          const qtyToDeduct = Number(acc.quantity || 1);
+          const newQty = Math.max(0, (accessory.quantity || 0) - qtyToDeduct);
+          await AccessoryMasterModel.findByIdAndUpdate(accessory._id, { quantity: newQty });
+          console.log(`[STORAGE CREATE JOBCARD] Deducted ${qtyToDeduct} from ${accessory.name}. New stock: ${newQty}`);
+        }
       }
     }
 
@@ -1046,12 +1050,17 @@ export class MongoStorage implements IStorage {
 
     // Handle accessory stock deduction for new accessories added during update
     if (jobCard.accessories && existingJob) {
-      const existingAccIds = (existingJob as any).accessories?.map((a: any) => a.id || a.accessoryId) || [];
+      const existingAccIds = (existingJob as any).accessories?.map((a: any) => String(a.id || a.accessoryId)) || [];
       for (const acc of jobCard.accessories) {
-        if (!existingAccIds.includes(acc.id)) {
-          await AccessoryMasterModel.findByIdAndUpdate(acc.id, {
-            $inc: { quantity: -(acc.quantity || 1) }
-          });
+        const currentAccId = String(acc.accessoryId || acc.id);
+        if (!existingAccIds.includes(currentAccId)) {
+          const accessory = await AccessoryMasterModel.findById(currentAccId);
+          if (accessory) {
+            const qtyToDeduct = Number(acc.quantity || 1);
+            const newQty = Math.max(0, (accessory.quantity || 0) - qtyToDeduct);
+            await AccessoryMasterModel.findByIdAndUpdate(accessory._id, { quantity: newQty });
+            console.log(`[STORAGE UPDATE JOBCARD] Deducted ${qtyToDeduct} from ${accessory.name}. New stock: ${newQty}`);
+          }
         }
       }
     }
