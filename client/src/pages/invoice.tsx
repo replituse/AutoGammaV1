@@ -45,9 +45,41 @@ const BUSINESS_INFO = {
     phone: "+91 77380 16768",
     email: "support@autogamma.in",
     website: "www.autogamma.in",
-    logo: autoGammaLogo,
+    logo: null,
   }
 };
+
+function InvoiceHeader({ business, invoiceNo, date }: { business: string; invoiceNo: string; date?: string | Date }) {
+  const businessInfo = BUSINESS_INFO[business];
+  
+  return (
+    <div className="flex justify-between items-start border-b-2 border-red-600 pb-6 mb-6">
+      {/* Left Side: Logo/Text and Business Details */}
+      <div className="space-y-3">
+        {business === "AGNX" ? (
+          <div className="h-16 flex items-center">
+            <span className="text-4xl font-black text-red-600 tracking-tighter italic">AGNX</span>
+          </div>
+        ) : (
+          <img src={businessInfo.logo!} alt={businessInfo.name} className="h-16 object-contain" />
+        )}
+        <div className="text-sm text-slate-600 space-y-0.5 max-w-xs">
+          <p><span className="font-semibold text-slate-700">ADDRESS:</span> {businessInfo.address}</p>
+          <p><span className="font-semibold text-slate-700">CONTACT:</span> {businessInfo.phone}</p>
+          <p><span className="font-semibold text-slate-700">MAIL:</span> {businessInfo.email}</p>
+          <p><span className="font-semibold text-slate-700">WEBSITE:</span> {businessInfo.website}</p>
+        </div>
+      </div>
+      
+      {/* Right Side: Invoice Details */}
+      <div className="text-right space-y-2">
+        <p className="text-xs font-bold text-red-600 uppercase tracking-widest">Invoice Details</p>
+        <p className="text-2xl font-bold text-slate-900">#{invoiceNo}</p>
+        <p className="text-slate-600">{format(new Date(date || new Date()), "dd MMM yyyy, hh:mm a")}</p>
+      </div>
+    </div>
+  );
+}
 
 function InvoiceItemDetails({ item }: { item: InvoiceItem }) {
   const isPPF = item.type === "PPF";
@@ -124,26 +156,11 @@ function PrintableInvoice({ invoice }: { invoice: Invoice }) {
   
   return (
     <div className="print-invoice bg-white p-8" id="printable-invoice">
-      {/* Header with Logo, Business Info, and Invoice Details */}
-      <div className="flex justify-between items-start border-b-2 border-red-600 pb-6 mb-6">
-        {/* Left Side: Logo and Business Details */}
-        <div className="space-y-3">
-          <img src={businessInfo.logo} alt={businessInfo.name} className="h-16 object-contain" />
-          <div className="text-sm text-slate-600 space-y-0.5 max-w-xs">
-            <p><span className="font-semibold text-slate-700">ADDRESS:</span> {businessInfo.address}</p>
-            <p><span className="font-semibold text-slate-700">CONTACT:</span> {businessInfo.phone}</p>
-            <p><span className="font-semibold text-slate-700">MAIL:</span> {businessInfo.email}</p>
-            <p><span className="font-semibold text-slate-700">WEBSITE:</span> {businessInfo.website}</p>
-          </div>
-        </div>
-        
-        {/* Right Side: Invoice Details */}
-        <div className="text-right space-y-2">
-          <p className="text-xs font-bold text-red-600 uppercase tracking-widest">Invoice Details</p>
-          <p className="text-2xl font-bold text-slate-900">#{invoice.invoiceNo}</p>
-          <p className="text-slate-600">{format(new Date(invoice.date || new Date()), "dd MMM yyyy, hh:mm a")}</p>
-        </div>
-      </div>
+      <InvoiceHeader 
+        business={invoice.business} 
+        invoiceNo={invoice.invoiceNo} 
+        date={invoice.date} 
+      />
 
 
       {/* Bill To and Vehicle Details */}
@@ -480,11 +497,17 @@ export default function InvoicePage() {
     document.body.appendChild(tempDiv);
 
     const root = document.createElement('div');
+    const isAGNX = invoice.business === "AGNX";
     root.innerHTML = `
       <div class="print-invoice bg-white p-8" style="width: 800px; font-family: Arial, sans-serif;">
         <div style="display: flex; justify-content: space-between; border-bottom: 2px solid #dc2626; padding-bottom: 24px; margin-bottom: 24px;">
           <div>
-            <h2 style="font-size: 24px; font-weight: bold; color: #1e293b;">${invoice.business}</h2>
+            ${isAGNX ? 
+              `<div style="height: 64px; display: flex; align-items: center;">
+                <span style="font-size: 36px; font-weight: 900; color: #dc2626; font-style: italic; letter-spacing: -2px;">AGNX</span>
+              </div>` :
+              `<h2 style="font-size: 24px; font-weight: bold; color: #1e293b;">${invoice.business}</h2>`
+            }
             <p style="font-size: 12px; color: #64748b; max-width: 300px;">Shop no. 09 & 10, Shreeji Parasio, Prasad Hotel Road, Badlapur, Maharashtra 421503</p>
             <p style="font-size: 12px; color: #64748b;">Contact: +91 77380 16768</p>
           </div>
