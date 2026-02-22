@@ -342,6 +342,7 @@ export default function AddJobPage() {
   const [rollQty, setRollQty] = useState(0);
   const [selectedAccessoryCategory, setSelectedAccessoryCategory] = useState("");
   const [selectedAccessory, setSelectedAccessory] = useState("");
+  const [accessoryQty, setAccessoryQty] = useState(1);
   const [showBusinessDialog, setShowBusinessDialog] = useState(false);
   const [servicesExpanded, setServicesExpanded] = useState(false);
   const [ppfExpanded, setPpfExpanded] = useState(false);
@@ -551,8 +552,22 @@ export default function AddJobPage() {
   const handleAddAccessory = () => {
     const a = accessories.find(item => item.id === selectedAccessory);
     if (a) {
-      appendAccessory({ accessoryId: a.id!, name: a.name, price: a.price } as any);
+      if (accessoryQty > a.quantity) {
+        toast({
+          title: "Insufficient Stock",
+          description: `Only ${a.quantity} units available in stock.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      appendAccessory({ 
+        accessoryId: a.id!, 
+        name: a.name, 
+        price: a.price,
+        quantity: accessoryQty 
+      } as any);
       setSelectedAccessory("");
+      setAccessoryQty(1);
     }
   };
 
@@ -561,7 +576,7 @@ export default function AddJobPage() {
   const createJobMutation = useMutation({
     mutationFn: async (values: JobCardFormValues) => {
       console.log("Mutation starting - Payload:", values);
-      const subtotal = [...values.services, ...values.ppfs, ...values.accessories].reduce((acc, curr) => acc + curr.price, 0) + values.laborCharge;
+      const subtotal = [...values.services, ...values.ppfs, ...values.accessories].reduce((acc, curr) => acc + (curr.price * (curr.quantity || 1)), 0) + values.laborCharge;
       const afterDiscount = subtotal - values.discount;
       const tax = afterDiscount * (values.gst / 100);
       const estimatedCost = Math.round(afterDiscount + tax);
@@ -1301,20 +1316,20 @@ export default function AddJobPage() {
               {accessoriesExpanded && (
               <CardContent className="p-6 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                  <div className="md:col-span-5 space-y-1.5">
+                  <div className="md:col-span-3 space-y-1.5">
                     <label className="text-xs font-bold text-muted-foreground uppercase">Accessory Category</label>
                     <Select value={selectedAccessoryCategory} onValueChange={setSelectedAccessoryCategory}>
                       <SelectTrigger className="h-11">
                         <SelectValue placeholder="Accessory Category" />
                       </SelectTrigger>
                       <SelectContent>
-                        {accessoryCategories.map(c => (
-                          <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                        {Array.from(new Set(accessories.map(a => a.category))).map(cat => (
+                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="md:col-span-4 space-y-1.5">
+                  <div className="md:col-span-3 space-y-1.5">
                     <label className="text-xs font-bold text-muted-foreground uppercase">Accessory Name</label>
                     <Select value={selectedAccessory} onValueChange={setSelectedAccessory} disabled={!selectedAccessoryCategory}>
                       <SelectTrigger className="h-11">
@@ -1322,10 +1337,20 @@ export default function AddJobPage() {
                       </SelectTrigger>
                       <SelectContent>
                         {accessories.filter(a => a.category === selectedAccessoryCategory).map(a => (
-                          <SelectItem key={a.id} value={a.id!}>{a.name}</SelectItem>
+                          <SelectItem key={a.id} value={a.id!}>{a.name} (Stock: {a.quantity})</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="md:col-span-3 space-y-1.5">
+                    <label className="text-xs font-bold text-muted-foreground uppercase">Quantity</label>
+                    <Input 
+                      type="number" 
+                      min="1" 
+                      value={accessoryQty} 
+                      onChange={(e) => setAccessoryQty(parseInt(e.target.value) || 1)}
+                      className="h-11"
+                    />
                   </div>
                   <div className="md:col-span-3">
                     <Button type="button" onClick={handleAddAccessory} className="w-full h-11 bg-red-100 text-red-600 hover:bg-red-200 border-none font-semibold">
@@ -1339,7 +1364,10 @@ export default function AddJobPage() {
                     <div className="divide-y">
                       {accessoryFields.map((field, index) => (
                         <div key={field.id} className="flex items-center justify-between p-3">
-                          <span className="text-sm font-medium">{(field as any).name}</span>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium">{(field as any).name}</span>
+                            <span className="text-xs text-muted-foreground">Quantity: {(field as any).quantity || 1} | Price: ₹{((field as any).price * ((field as any).quantity || 1)).toLocaleString()}</span>
+                          </div>
                           <Button variant="ghost" size="icon" type="button" onClick={() => removeAccessory(index)} className="h-8 w-8 text-slate-400 hover:text-red-600">
                             <Trash2 className="h-4 w-4" />
                           </Button>
