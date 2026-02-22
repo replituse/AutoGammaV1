@@ -756,6 +756,21 @@ export class MongoStorage implements IStorage {
     });
     await j.save();
 
+    // Deduct Accessory stock
+    if (jobCard.accessories && jobCard.accessories.length > 0) {
+      for (const item of jobCard.accessories) {
+        const accessoryId = item.accessoryId || (item as any).id;
+        if (accessoryId) {
+          const accessory = await AccessoryMasterModel.findById(accessoryId);
+          if (accessory) {
+            const qtyToDeduct = item.quantity || 1;
+            accessory.quantity -= qtyToDeduct;
+            await accessory.save();
+          }
+        }
+      }
+    }
+
     // Generate invoices for new job card
     const businesses = ["Auto Gamma", "AGNX"] as const;
     const yearInvoice = new Date().getFullYear();
