@@ -759,7 +759,7 @@ export class MongoStorage implements IStorage {
     // Deduct Accessory stock
     if (jobCard.accessories && jobCard.accessories.length > 0) {
       for (const item of jobCard.accessories) {
-        const accessoryId = item.accessoryId || (item as any).id;
+        const accessoryId = (item as any).accessoryId || (item as any).id;
         if (accessoryId) {
           const accessory = await AccessoryMasterModel.findById(accessoryId);
           if (accessory) {
