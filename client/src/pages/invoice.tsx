@@ -288,19 +288,31 @@ function PrintableInvoice({ invoice }: { invoice: Invoice }) {
             <span className="font-bold">₹{(invoice.subtotal + laborCharge - discount).toLocaleString()}</span>
           </div>
 
-          <div className="flex justify-between text-slate-600">
-            <span className="font-medium">(+) SGST: {halfGst.toFixed(2)}%</span>
-            <span className="font-bold">₹{(invoice.gstAmount / 2).toLocaleString()}</span>
-          </div>
+          {(() => {
+            const subtotalWithLabor = invoice.subtotal + laborCharge - discount;
+            const gstRate = invoice.gstPercentage || 18;
+            const basePrice = subtotalWithLabor / (1 + gstRate / 100);
+            const totalGst = subtotalWithLabor - basePrice;
+            const halfGstAmount = totalGst / 2;
 
-          <div className="flex justify-between text-slate-600 pb-2 border-b border-slate-200">
-            <span className="font-medium">(+) CGST: {halfGst.toFixed(2)}%</span>
-            <span className="font-bold">₹{(invoice.gstAmount / 2).toLocaleString()}</span>
-          </div>
+            return (
+              <>
+                <div className="flex justify-between text-slate-600">
+                  <span className="font-medium">(+) SGST: {(gstRate / 2).toFixed(2)}%</span>
+                  <span className="font-bold">₹{Math.round(halfGstAmount).toLocaleString()}</span>
+                </div>
+
+                <div className="flex justify-between text-slate-600 pb-2 border-b border-slate-200">
+                  <span className="font-medium">(+) CGST: {(gstRate / 2).toFixed(2)}%</span>
+                  <span className="font-bold">₹{Math.round(halfGstAmount).toLocaleString()}</span>
+                </div>
+              </>
+            );
+          })()}
 
           <div className="flex justify-between items-center pt-2 text-xl font-black text-red-600">
             <span className="uppercase tracking-tighter">Grand Total</span>
-            <span>₹{invoice.totalAmount.toLocaleString()}</span>
+            <span>₹{(invoice.subtotal + laborCharge - discount).toLocaleString()}</span>
           </div>
         </div>
       </div>
@@ -549,15 +561,15 @@ export default function InvoicePage() {
           <div style="width: 300px; background: #f8fafc; padding: 16px; border-radius: 8px;">
             <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0;">
               <span>Subtotal</span>
-              <span style="font-weight: bold;">₹${invoice.subtotal.toLocaleString()}</span>
+              <span style="font-weight: bold;">₹{invoice.subtotal.toLocaleString()}</span>
             </div>
             <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0;">
-              <span>GST</span>
-              <span style="font-weight: bold;">₹${invoice.gstAmount.toLocaleString()}</span>
+              <span>GST (${invoice.gstPercentage || 18}%)</span>
+              <span style="font-weight: bold;">₹${Math.round(invoice.subtotal - (invoice.subtotal / (1 + (invoice.gstPercentage || 18) / 100))).toLocaleString()}</span>
             </div>
             <div style="display: flex; justify-content: space-between; padding: 12px 0; font-size: 18px; font-weight: bold; color: #dc2626;">
               <span>TOTAL</span>
-              <span>₹${invoice.totalAmount.toLocaleString()}</span>
+              <span>₹${invoice.subtotal.toLocaleString()}</span>
             </div>
           </div>
         </div>
@@ -594,7 +606,7 @@ export default function InvoicePage() {
       }
 
       const message = encodeURIComponent(
-        `Hello ${invoice.customerName},\n\nPlease find your invoice #${invoice.invoiceNo} for ₹${invoice.totalAmount.toLocaleString()}.\n\nThank you for choosing ${invoice.business}!`
+        `Hello ${invoice.customerName},\n\nPlease find your invoice #${invoice.invoiceNo} for ₹${invoice.subtotal.toLocaleString()}.\n\nThank you for choosing ${invoice.business}!`
       );
 
       window.open(`https://web.whatsapp.com/send?phone=${phoneNumber}&text=${message}`, '_blank');

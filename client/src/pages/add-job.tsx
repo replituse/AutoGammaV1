@@ -374,10 +374,8 @@ export default function AddJobPage() {
       const sanitizedValue = String(value).replace(/[^0-9.]/g, "");
       finalValue = sanitizedValue === "" ? 0 : sanitizedValue;
 
-      const subtotal = [...form.getValues("services"), ...form.getValues("ppfs"), ...form.getValues("accessories")].reduce((acc, curr) => acc + (curr.price || 0), 0) + Number(form.getValues("laborCharge") || 0);
-      const afterDiscount = subtotal - Number(form.getValues("discount") || 0);
-      const tax = afterDiscount * (Number(form.getValues("gst") || 18) / 100);
-      const totalEstimatedCost = Math.round(afterDiscount + tax);
+      const subtotal = [...form.getValues("services"), ...form.getValues("ppfs"), ...form.getValues("accessories")].reduce((acc, curr) => acc + (curr.price || 0), 0) + Number(form.getValues("laborCharge") || 0) - Number(form.getValues("discount") || 0);
+      const totalEstimatedCost = subtotal;
       
       const otherPaymentsTotal = payments.reduce((acc, p, i) => i === index ? acc : acc + Number(p.amount || 0), 0);
       const maxAllowed = totalEstimatedCost - otherPaymentsTotal;
@@ -605,10 +603,8 @@ export default function AddJobPage() {
     try {
       console.log("Form submitted with data:", data);
       
-      const subtotal = [...data.services, ...data.ppfs, ...data.accessories].reduce((acc, curr) => acc + (curr.price * (curr.quantity || 1)), 0) + Number(data.laborCharge || 0);
-      const afterDiscount = subtotal - Number(data.discount || 0);
-      const tax = afterDiscount * (Number(data.gst || 18) / 100);
-      const totalEstimatedCost = Math.round(afterDiscount + tax);
+      const subtotal = [...data.services, ...data.ppfs, ...data.accessories].reduce((acc, curr) => acc + (curr.price * (curr.quantity || 1)), 0) + Number(data.laborCharge || 0) - Number(data.discount || 0);
+      const totalEstimatedCost = subtotal;
       
       const payload = {
         ...data,
@@ -1426,35 +1422,30 @@ export default function AddJobPage() {
                           <span className="text-slate-500">Subtotal</span>
                           <span>₹{(
                             [...form.watch("services"), ...form.watch("ppfs"), ...form.watch("accessories")].reduce((acc, curr) => acc + (curr.price || 0), 0) + 
-                            Number(form.watch("laborCharge") || 0)
+                            Number(form.watch("laborCharge") || 0) -
+                            Number(form.watch("discount") || 0)
                           ).toLocaleString()}</span>
                         </div>
                         
-                        {form.watch("discount") > 0 && (
-                          <div className="flex justify-between items-center text-sm font-medium text-green-600">
-                            <span>Discount</span>
-                            <span>-₹{form.watch("discount").toLocaleString()}</span>
-                          </div>
-                        )}
-                        
                         <div className="flex justify-between items-center text-sm font-medium text-slate-500">
                           <span>GST ({form.watch("gst")}%)</span>
-                          <span>₹{Math.round(
-                            ([...form.watch("services"), ...form.watch("ppfs"), ...form.watch("accessories")].reduce((acc, curr) => acc + (curr.price || 0), 0) + 
-                            Number(form.watch("laborCharge") || 0) - 
-                            Number(form.watch("discount") || 0)) * 
-                            (form.watch("gst") / 100)
-                          ).toLocaleString()}</span>
+                          <span>₹{(() => {
+                            const subtotal = [...form.watch("services"), ...form.watch("ppfs"), ...form.watch("accessories")].reduce((acc, curr) => acc + (curr.price || 0), 0) + 
+                                            Number(form.watch("laborCharge") || 0) - 
+                                            Number(form.watch("discount") || 0);
+                            const gstRate = Number(form.watch("gst") || 0);
+                            const basePrice = subtotal / (1 + gstRate / 100);
+                            return Math.round(subtotal - basePrice).toLocaleString();
+                          })()}</span>
                         </div>
                         
                         <div className="flex justify-between items-center pt-2 border-t border-slate-200">
                           <span className="text-base font-bold text-slate-900">Total Estimated Cost</span>
                           <span className="text-xl font-black text-red-600">
-                            ₹{Math.round(
-                              ([...form.watch("services"), ...form.watch("ppfs"), ...form.watch("accessories")].reduce((acc, curr) => acc + (curr.price || 0), 0) + 
+                            ₹{(
+                              [...form.watch("services"), ...form.watch("ppfs"), ...form.watch("accessories")].reduce((acc, curr) => acc + (curr.price || 0), 0) + 
                               Number(form.watch("laborCharge") || 0) - 
-                              Number(form.watch("discount") || 0)) * 
-                              (1 + form.watch("gst") / 100)
+                              Number(form.watch("discount") || 0)
                             ).toLocaleString()}
                           </span>
                         </div>
@@ -1616,8 +1607,7 @@ export default function AddJobPage() {
                     <span className="text-lg font-black tracking-tight">₹{Math.round(
                       ([...form.watch("services"), ...form.watch("ppfs"), ...form.watch("accessories")].reduce((acc, curr) => acc + (curr.price || 0), 0) + 
                       Number(form.watch("laborCharge") || 0) - 
-                      Number(form.watch("discount") || 0)) * 
-                      (1 + form.watch("gst") / 100)
+                      Number(form.watch("discount") || 0))
                     ).toLocaleString()}</span>
                   </div>
                   <div className="flex gap-4">
@@ -1631,14 +1621,12 @@ export default function AddJobPage() {
                         Math.round(
                           ([...form.watch("services"), ...form.watch("ppfs"), ...form.watch("accessories")].reduce((acc, curr) => acc + (curr.price || 0), 0) + 
                           Number(form.watch("laborCharge") || 0) - 
-                          Number(form.watch("discount") || 0)) * 
-                          (1 + form.watch("gst") / 100)
+                          Number(form.watch("discount") || 0))
                         ) - payments.reduce((acc, p) => acc + Number(p.amount || 0), 0) > 0 ? "text-red-600" : "text-green-600"
                       }`}>₹{Math.max(0, Math.round(
                         ([...form.watch("services"), ...form.watch("ppfs"), ...form.watch("accessories")].reduce((acc, curr) => acc + (curr.price || 0), 0) + 
                         Number(form.watch("laborCharge") || 0) - 
-                        Number(form.watch("discount") || 0)) * 
-                        (1 + form.watch("gst") / 100)
+                        Number(form.watch("discount") || 0))
                       ) - payments.reduce((acc, p) => acc + Number(p.amount || 0), 0)).toLocaleString()}</span>
                     </div>
                   </div>

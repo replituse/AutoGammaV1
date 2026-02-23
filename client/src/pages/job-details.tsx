@@ -302,9 +302,10 @@ export default function JobDetailsPage() {
                       ...(job.ppfs || []),
                       ...(job.accessories || [])
                     ].reduce((acc, curr) => acc + (curr.price || 0), 0);
-                    const subtotal = itemsTotal + (job.laborCharge || 0);
-                    const afterDiscount = subtotal - (job.discount || 0);
-                    const gstAmount = Math.round(afterDiscount * ((job.gst || 0) / 100));
+                    const subtotal = itemsTotal + (job.laborCharge || 0) - (job.discount || 0);
+                    const gstRate = job.gst || 0;
+                    const basePrice = subtotal / (1 + gstRate / 100);
+                    const gstAmount = subtotal - basePrice;
 
                     return (
                       <>
@@ -317,15 +318,25 @@ export default function JobDetailsPage() {
                           <span className="text-base font-bold text-green-600">-₹{(job.discount || 0).toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm font-medium text-slate-500">
-                          <span>GST ({job.gst || 0}%)</span>
-                          <span className="text-base font-bold text-slate-900">₹{(gstAmount || 0).toLocaleString()}</span>
+                          <span>GST ({gstRate}%)</span>
+                          <span className="text-base font-bold text-slate-900">₹{Math.round(gstAmount).toLocaleString()}</span>
                         </div>
                       </>
                     );
                   })()}
                   <div className="flex justify-between items-center text-sm font-medium text-slate-500 pt-2 border-t border-slate-100">
                     <span>Estimated Cost</span>
-                    <span className="text-lg font-black text-slate-900">₹{(job.estimatedCost || 0).toLocaleString()}</span>
+                    <span className="text-lg font-black text-slate-900">
+                      {(() => {
+                        const itemsTotal = [
+                          ...(job.services || []),
+                          ...(job.ppfs || []),
+                          ...(job.accessories || [])
+                        ].reduce((acc, curr) => acc + (curr.price || 0), 0);
+                        const subtotal = itemsTotal + (job.laborCharge || 0) - (job.discount || 0);
+                        return `₹${subtotal.toLocaleString()}`;
+                      })()}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center text-sm font-medium text-slate-500 pt-2 border-t border-slate-100">
                     <span>Assigned Technician</span>
